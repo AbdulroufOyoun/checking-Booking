@@ -23,9 +23,11 @@ class User extends Authenticatable
         'job_number',
         'jobtitle_id',
         'department_id',
+        'discount_id',
         'mobile',
         'email',
         'password',
+        'active',
     ];
 
     /**

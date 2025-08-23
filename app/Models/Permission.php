@@ -11,14 +11,18 @@ class Permission extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name',
-        'name_local',
-        'description',
+        'name_en',
+        'name_ar',
+        'description_en',
+        'description_ar',
+        'active',
     ];
+    public $timestamps = false;
 
-    function userPermissions() :HasMany
+
+
+    function userPermissions(): HasMany
     {
         return $this->hasMany(User_permission::class);
     }
-
 }

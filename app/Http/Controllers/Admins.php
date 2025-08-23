@@ -24,27 +24,35 @@ class Admins extends Controller
     function createNewAdmin(Request $request)
     {
         $validation = Validator::make($request->all(), [
-            'email' => 'required|email|unique:users,email',
             'name' => 'required|string',
-            'mobile' => 'required|string|min:10|max:10',
+            'job_number' => 'required|string',
+            'jobtitle_id' => 'required|numeric|exists:jobtitles,id',
+            'department_id' => 'required|numeric|exists:departments,id',
+            'mobile' => 'required|string|min:10|max:10|unique:users,mobile',
+            'email' => 'required|email|unique:users,email',
+            'discount_id' => 'required|numeric|exists:discounts,id',
+            'active' => 'required|numeric',   //0 => InActive 1 => Active
             'password' => 'required|confirmed|string',
-            'is_admin' => 'required|numeric',
         ]);
         if ($validation->fails()) {
-            return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 200);
+            return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 422);
         }
-        $admin = new Admin();
-        $admin->name = $request->name;
-        $admin->email = $request->email;
-        $admin->mobile = $request->mobile;
-        $admin->password = password_hash($request->password, PASSWORD_DEFAULT);
-        $admin->is_admin = $request->is_admin;
-        $admin->is_active = "0";
+        $user = new User();
+        $user->name = $request->name;
+        $user->job_number = $request->job_number;
+        $user->jobtitle_id = $request->jobtitle_id;
+        $user->department_id = $request->department_id;
+        $user->mobile = $request->mobile;
+        $user->email = $request->email;
+        $user->discount_id = $request->discount_id;
+        $user->active = $request->active;
+        $user->remember_token =  $user->createToken('remember_token')->plainTextToken;
+        $user->password = Hash::make($request->password);
         try {
-            $admin->save();
-            return ['result' => 'success', 'code' => 1, "user" => $admin, "error" => ""];
+            $user->save();
+            return ['result' => 'success', 'code' => 1, "user" => $user, "error" => ""];
         } catch (Exception $e) {
-            return ['result' => 'failed', 'code' => -1, "error" => $e];
+            return ['result' => 'failed', 'code' => -1, "error" => $e->getMessage()];
         }
     }
 
@@ -265,8 +273,8 @@ class Admins extends Controller
                             ->orWhere(function ($query) use ($request) {
                                 $query->where('start_date', '<=', $request->start_date)
                                     ->where('expire_date', '>=', $request->expire_date);
-                            }, );
-                    }, )->get();
+                            },);
+                    },)->get();
 
                 switch ($request->type_search) {
                     case 1: // غرفة فارغة: أول غرفة فارغة ترجع فوراً
@@ -746,5 +754,4 @@ class Admins extends Controller
             return ['result' => 'failed', 'code' => 0, 'error' => 'Data not saved'];
         }
     }
-
 }

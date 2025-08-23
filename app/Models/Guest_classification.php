@@ -11,7 +11,9 @@ class Guest_classification extends Model
     use HasFactory;
     protected $table = 'guest_classifications';
 
-    function guest_classification_features() : HasMany
+    protected $fillable = ['name_ar', 'name_en', 'description', 'discount_id', 'active'];
+
+    function guest_classification_features(): HasMany
     {
         return $this->hasMany(Guest_classification_feature::class);
     }

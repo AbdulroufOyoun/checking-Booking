@@ -16,15 +16,23 @@ class Floor extends Model
 
     public $timestamps = true;
 
-    function suites():HasMany {
+    function suites(): HasMany
+    {
         return $this->hasMany(Suite::class);
     }
 
-    function rooms():HasMany {
+    function rooms(): HasMany
+    {
         return $this->hasMany(Room::class);
     }
 
-    function building():BelongsTo {
+    function facilitie(): HasMany
+    {
+        return $this->hasMany(Facilitie::class);
+    }
+
+    function building(): BelongsTo
+    {
         return $this->belongsTo(Building::class);
     }
 }

@@ -14,30 +14,28 @@ class Reservation extends Model
     public $timestamps = true;
 
 
-    public function room() : BelongsTo
+    public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
     }
 
-    function client() : BelongsTo
+    function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
 
-    function user() : BelongsTo
+    function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    function stay_reason() : BelongsTo
+    function stay_reason(): BelongsTo
     {
         return $this->belongsTo(Stay_reason::class);
     }
 
-    function reservation_source() : BelongsTo
+    function reservation_source(): BelongsTo
     {
         return $this->belongsTo(Reservation_source::class);
     }
-
 }
-

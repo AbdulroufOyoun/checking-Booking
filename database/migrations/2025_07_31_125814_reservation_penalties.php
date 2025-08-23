@@ -11,11 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create("reservation_penalties",function(Blueprint $table) {
+        Schema::create("reservation_penalties", function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('reservation_id');
             $table->unsignedBigInteger('penalty_id');
-            $table->unique(['reservation_id','penalty_id']);
+            $table->unique(['reservation_id', 'penalty_id']);
             $table->double('amount')->comment('the penalty amount');
             $table->timestamps();
         });
@@ -24,6 +24,7 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      */
+
     public function down(): void
     {
         Schema::dropIfExists('reservation_penalties');

@@ -5,8 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Stay_reason extends Model
+class Pricingplan extends Model
 {
     use HasFactory;
-    protected $fillable = ['name_ar', 'name_en' , 'description'];
+    protected $table = 'pricing_plans';
+    protected $fillable = ['NameAr', 'NameEn', 'StartDate', 'EndDate'];
 }

@@ -9,11 +9,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class RoomType extends Model
 {
     use HasFactory;
+    protected $table = 'room_types';
     public $timestamps = true;
-
-    function rooms() : HasMany
+    function rooms(): HasMany
     {
         return $this->hasMany(Room::class);
     }
-
 }

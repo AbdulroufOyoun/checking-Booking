@@ -14,7 +14,8 @@ return new class extends Migration
         // rooms features
         Schema::create('features', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->comment('the feature name');
+            $table->string('name_ar')->comment('the feature name_ar');
+            $table->string('name_en')->comment('the feature name_en');
             $table->text('description')->nullable()->comment('the feature description');
         });
     }

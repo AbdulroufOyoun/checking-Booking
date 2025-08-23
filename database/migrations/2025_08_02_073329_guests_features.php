@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         // free breakfast and other features
-        Schema::create('guests_features',function (Blueprint $table) {
+        Schema::create('guests_features', function (Blueprint $table) {
             $table->id();
-            $table->string('feature_name')->comment('Name of the feature');
-            $table->string('feature_local_name')->comment('the name of the feature in local language');
+            $table->string('name_ar')->comment('Name of the feature');
+            $table->string('name_en')->comment('the name of the feature in local language');
             $table->string('feature_description')->nullable()->comment('Description of the feature');
             $table->timestamps();
         });

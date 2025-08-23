@@ -11,8 +11,10 @@ class Guest_feature extends Model
     use HasFactory;
 
     protected $table = 'guests_features';
+    protected $fillable = ['name_ar', 'name_en', 'feature_description'];
 
-    function guest_classification_features() :HasMany
+
+    function guest_classification_features(): HasMany
     {
         return $this->hasMany(Guest_classification_feature::class, 'guest_feature_id');
     }

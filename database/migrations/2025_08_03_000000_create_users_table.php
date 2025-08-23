@@ -18,7 +18,7 @@ return new class extends Migration {
             $table->unsignedBigInteger('department_id')->comment("Foreign key to user departments table");
             $table->string('mobile')->unique();
             $table->string('email')->unique();
-            $table->unsignedBigInteger('discount_id');
+            $table->unsignedBigInteger('discount_id')->nullable();
             $table->tinyInteger('active')->comment("0 => InActive 1 => Active"); // 0=> Active  1=>InActive
             $table->string('password');
             $table->rememberToken();

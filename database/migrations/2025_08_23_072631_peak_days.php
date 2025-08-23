@@ -9,13 +9,13 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
+    public function up()
     {
-        Schema::create('stay_reasons', function (Blueprint $table) {
+        Schema::create('peak_days', function (Blueprint $table) {
             $table->id();
-            $table->string('name_ar');
-            $table->string('name_en');
-            $table->string('description')->nullable();
+            $table->string('day_name_ar', 50);
+            $table->string('day_name_en', 50);
+            $table->tinyInteger('check')->default(0)->comment('0=Normal, 1=Peak day, 2=Day before peak');
             $table->timestamps();
         });
     }
@@ -23,9 +23,8 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      */
-
     public function down(): void
     {
-        Schema::dropIfExists('stay_reasons');
+        Schema::dropIfExists('peak_days');
     }
 };

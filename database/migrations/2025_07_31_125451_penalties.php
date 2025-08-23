@@ -17,7 +17,7 @@ return new class extends Migration
             $table->double('value')->comment('the value of the penalty');
             $table->string('name_ar', 100);
             $table->string('name_en', 100);
-            $table->string('description');
+            $table->string('description')->nullable();
             $table->timestamps();
         });
     }

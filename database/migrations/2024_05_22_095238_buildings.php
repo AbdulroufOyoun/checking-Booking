@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('name')->comment('Name of the building');
             $table->string('number')->unique()->comment('Building number');
             $table->string('lock_id')->nullable()->unique()->comment('Lock ID for the building');
+            $table->tinyInteger('active')->default(1)->comment('1 active | 0 Inactive');
             $table->timestamps();
         });
     }

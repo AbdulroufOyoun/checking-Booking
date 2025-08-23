@@ -13,12 +13,11 @@ return new class extends Migration
     {
         Schema::create('guest_classifications', function (Blueprint $table) {
             $table->id();
-            $table->string('classification_name')->unique()->comment('Name of the guest classification');
-            $table->string('classification_local_name')->nullable()->comment('Local name of the guest classification');
+            $table->string('name_ar')->unique()->comment('Name of the guest classification');
+            $table->string('name_en')->unique()->nullable()->comment('Local name of the guest classification');
             $table->string('description')->nullable()->comment('Description of the guest classification');
-            $table->unsignedBigInteger('discount_id')->default(0)->comment('Type of discount applied to the guest classification');
-            $table->string('granted_facilities')->nullable()->comment('Facilities granted to the guest classification');
-            $table->tinyInteger('active')->default(1)->comment('0 for inactive, 1 for active');
+            $table->unsignedBigInteger('discount_id')->nullable()->comment('Type of discount applied to the guest classification');
+            $table->tinyInteger(column: 'active')->default(1)->comment('0 for inactive, 1 for active');
             $table->timestamps();
         });
     }

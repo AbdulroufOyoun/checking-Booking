@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->unsignedBigInteger('building_id');
             $table->string('number');
             $table->string('lock_id')->nullable()->unique();
+            $table->tinyInteger('active')->default(1)->comment('1 active | 0 Inactive');
             $table->timestamps();
         });
     }
@@ -27,5 +28,3 @@ return new class extends Migration {
         Schema::dropIfExists('floors');
     }
 };
-
-

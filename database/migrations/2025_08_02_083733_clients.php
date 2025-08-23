@@ -24,7 +24,7 @@ return new class extends Migration
             $table->date('birth_date')->nullable()->comment('Birth date of the client');
             $table->enum('gender', ['MALE', 'FEMALE'])->comment('Gender of the client');
             $table->unsignedBigInteger('guest_classification_id')->default(0)->comment('Classification of the client');
-            $table->enum('guest_type', ['CITIZEN', 'RESIDENT','GULF CITIZEN','VISITOR'])->default('CITIZEN')->comment('Type of the client');
+            // $table->enum('guest_type', ['CITIZEN', 'RESIDENT','GULF CITIZEN','VISITOR'])->default('CITIZEN')->comment('Type of the client');
             $table->timestamps();
         });
     }

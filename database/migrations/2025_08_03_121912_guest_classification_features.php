@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('guest_classification_id')->comment('ID of the guest classification');
             $table->unsignedBigInteger('guest_feature_id')->comment('ID of the guest feature');
-            $table->unique(['guest_classification_id', 'guest_feature_id'], 'unique_guest_classification_feature');
             $table->timestamps();
         });
     }
