@@ -19,4 +19,12 @@ class Discount extends Model
     {
         return $this->hasMany(related: Guest_classification::class);
     }
+
+    // protected $casts = [
+    //     'is_percentage' => 'boolean',
+    //     'is_fixed' => 'boolean',
+    //     'is_active' => 'boolean',
+    //     'percent' => 'integer',
+    //     'fixed_amount' => 'integer',
+    // ];
 }

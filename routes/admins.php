@@ -37,21 +37,6 @@ Route::get('getFacilitie', [Admins::class, 'getFacilitie']);
 Route::post('getFacilitieByBuilding', [Admins::class, 'getFacilitieByBuilding']);
 Route::post('getFacilitieByRoom', [Admins::class, 'getFacilitieByRoom']);
 Route::post('updateReservation', [Admins::class, 'updateReservation']);
-//=========================================Buildings=============================================
-Route::post('addBuilding', [Buildings::class, 'addBuilding']);
-Route::post('addFloor', [Buildings::class, 'addFloor']);
-Route::post('addSuite', [Buildings::class, 'addSuite']);
-Route::post('addRoom', [Buildings::class, 'addRoom']);
-Route::post('deleteRoom', [Buildings::class, 'deleteRoom']);
-Route::post('deleteFloor', [Buildings::class, 'deleteFloor']);
-Route::post('deleteSuite', [Buildings::class, 'deleteSuite']);
-Route::post('deleteBuilding', [Buildings::class, 'deleteBuilding']);
-Route::post('updateRoom', [Buildings::class, 'updateRoom']);
-Route::post('updateSuite', [Buildings::class, 'updateSuite']);
-Route::post('updateFloor', [Buildings::class, 'updateFloor']);
-Route::post('updateBuilding', [Buildings::class, 'updateBuilding']);
-Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
-Route::post('addMultiRoom', [Buildings::class, 'addMultiRoom']);
 //=========================================Reservation=============================================
 Route::post('getReservationByDate', [Reservations::class, 'getReservationByDate']);
 Route::get('getReservation', [Reservations::class, 'getReservation']);

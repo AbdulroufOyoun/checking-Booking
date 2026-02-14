@@ -20,7 +20,6 @@ return new class extends Migration
             $table->double('fixed_amount')->default(0)->comment("Fixed amount for the discount");
             $table->boolean('is_active')->default(true)->comment("0 => InActive 1 => Active");
             $table->timestamps();
-            // $table->unique(['is_percentage', 'is_fixed'], 'unique_discount_type');
             $table->comment("Table to store available discounts for users");
             // if both is_percentage and is_fixed are true, then the percentage will be active but the amount should not be more than the fixed amount
         });

@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Client_Classifications;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
@@ -34,8 +34,11 @@ use App\Models\Department;
 use App\Models\Job_title;
 use App\Models\User_permission;
 use App\Models\PeakDay;
+use App\Models\PeakMonth;
 use App\Models\Pricingplan;
 use App\Models\RoomtypePricingplan;
+use App\Http\Resources\UserResource;
+use App\Models\RoomType;
 use Exception;
 
 class Users extends Controller
@@ -253,14 +256,160 @@ class Users extends Controller
         return ['result' => 'success', 'code' => 1, 'record' => $record];
     }
 
+    //=====================================Users===============================================================
+
+    public function login(Request $request)
+    {
+        $validation = Validator::make($request->all(), [
+            'job_number' => 'required|string',
+            'password'   => 'required|min:4',
+        ]);
+
+        if ($validation->fails()) {
+            return response(["result" => "failed", "code" => 0, "error" => $validation->errors()], 200);
+        }
+
+        $user = User::where('job_number', $request->job_number)->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response(["result" => "failed", "code" => 0, "error" => "Login failed"], 200);
+        }
+
+        if ($user->active === 0) {
+            return response(["result" => "failed", "code"   => 0, "error"  => "The account has been deleted, cannot log in", "token"  => ""], 200);
+        }
+
+        $token = $user->createToken('token')->plainTextToken;
+
+        return ['result' => 'success', 'code' => 1, 'id' => $user->id, 'token' => $token];
+    }
+
+    public function addUser(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name'          => 'required|string|max:255',
+            'job_number'    => 'required|string|unique:users,job_number',
+            'jobtitle_id'   => 'required|numeric|exists:jobtitles,id',
+            'department_id' => 'required|numeric|exists:departments,id',
+            'mobile'        => 'required|string|unique:users,mobile',
+            'email'         => 'required|email|unique:users,email',
+            'discount_id'   => 'nullable|numeric|exists:discounts,id',
+            'permission_ids' => 'required|array',
+            'permission_ids.*' => 'numeric|exists:permissions,id',
+        ]);
+        if ($validator->fails()) {
+            return response(['result' => 'failed', 'error'  => $validator->errors()], 200);
+        }
+
+        DB::beginTransaction();
+        try {
+            $user = User::create([
+                'name'          => $request->name,
+                'job_number'    => $request->job_number,
+                'jobtitle_id'   => $request->jobtitle_id,
+                'department_id' => $request->department_id,
+                'mobile'        => $request->mobile,
+                'email'         => $request->email,
+                'discount_id'   => $request->discount_id,
+                'active'        => 1,
+                'password'      => Hash::make($request->job_number),
+            ]);
+            $this->addUserPermission($user->id, $request->permission_ids);
+            $user->load(['jobtitle', 'department', 'discount', 'permissions']);
+            DB::commit();
+            return response(['result' => 'success', 'data'   => new UserResource($user)],  200);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response(['result' => 'failed', 'error'  => $e->getMessage()], 500);
+        }
+    }
+
+    public function updateUser(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id'            => 'required|numeric',
+            'jobtitle_id'   => 'nullable|numeric|exists:jobtitles,id',
+            'department_id' => 'nullable|numeric|exists:departments,id',
+            'mobile'        => 'nullable|string|unique:users,mobile,' . $request->id,
+            'email'         => 'nullable|email|unique:users,email,' . $request->id,
+            'discount_id'   => 'nullable|numeric|exists:discounts,id',
+            'name'          => 'nullable|string',
+            'permission_ids' => 'required|array',
+            'permission_ids.*' => 'numeric|exists:permissions,id'
+        ]);
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+        $user = User::find($request->id);
+
+        if (!$user) {
+            return ['result' => 'failed', 'error' => 'User not found'];
+        }
+        if ($request->discount_id == 0) {
+            $user->discount_id = null;
+        }
+
+        try {
+            $user->update($request->only([
+                'jobtitle_id',
+                'department_id',
+                'mobile',
+                'email',
+                'discount_id',
+                'name'
+            ]));
+            if ($request->has('permission_ids')) {
+                $oldPermissions = $user->permissions()->pluck('permission_id')->toArray();
+                $newPermissions = $request->permission_ids;
+                sort($oldPermissions);
+                sort($newPermissions);
+                if ($oldPermissions !== $newPermissions) {
+                    $this->addUserPermission($request->id, $newPermissions);
+                }
+            }
+            return ['result' => 'success', 'data' => new UserResource($user)];
+        } catch (Exception $e) {
+            return ['result' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
+    public function inActiveUser(Request $request)
+    {
+        $user = User::find($request->id);
+
+        if (!$user) {
+            return ['result' => 'failed', 'error' => 'User not found'];
+        }
+
+        try {
+            $user->active = 0;
+            $user->save();
+
+            return ['result' => 'success', 'message' => 'User deactivated successfully'];
+        } catch (Exception $e) {
+            return ['result' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
+    public function getInfoUsers()
+    {
+        $activeUsers = User::with(['jobtitle', 'department', 'discount', 'permissions'])->where('active', 1)->get();
+        $inactiveUsers = User::with(['jobtitle', 'department', 'discount', 'permissions'])->where('active', 0)->get();
+        $jobTitle = Job_title::all();
+        $department = Department::all();
+        return ['result' => 'success', 'active_users' => UserResource::collection($activeUsers), 'inactive_users' => UserResource::collection($inactiveUsers), 'department' => $department, 'jobTitle' => $jobTitle];
+    }
+
     //=====================================Discounts===============================================
+
     public function addDiscount(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'is_percentage' => 'required|boolean',
+            'is_percentage' => 'required|numeric',
             'percent' => 'required_if:is_percentage,1|numeric|min:0',
-            'is_fixed' => 'required|boolean',
+            'is_fixed' => 'required|numeric',
             'fixed_amount' => 'required_if:is_fixed,1|numeric|min:0',
             'is_active' => 'boolean',  //0 for inactive, 1 for active
         ]);
@@ -273,15 +422,15 @@ class Users extends Controller
             return ['result' => 'failed', 'error' => 'Percentage cannot exceed fixed amount'];
         }
 
-        Discount::create([
+        $discount = Discount::create([
             'name' => $request->name,
             'is_percentage' => $request->is_percentage,
             'percent' => $request->percent ?? 0,
             'is_fixed' => $request->is_fixed,
             'fixed_amount' => $request->fixed_amount ?? 0,
-            'is_active' => $request->is_active ?? true,
+            'is_active' => $request->is_active ?? 1,
         ]);
-        return ['result' => 'success', 'error' => ''];
+        return ['result' => 'success', 'error' => '', 'data' => $discount];
     }
 
     public function updateDiscount(Request $request)
@@ -317,7 +466,7 @@ class Users extends Controller
             'fixed_amount' => $fixed_amount,
             'is_active' => $is_active,
         ]);
-        return ['result' => 'success', 'error' => ''];
+        return ['result' => 'success', 'error' => '', 'data' => $discount];
     }
 
     public function deleteDiscount(Request $request)
@@ -336,7 +485,6 @@ class Users extends Controller
         if ($discount->guest_classification()->exists()) {
             return ['result' => 'failed', 'error' => 'Discount linked to guest classification, can\'t delete.'];
         }
-
         try {
             $discount->delete();
             return ['result' => 'success', 'error' => ''];
@@ -349,7 +497,8 @@ class Users extends Controller
     {
         return Discount::all();
     }
-    //=====================================GuestClassification=======================================
+
+    //=====================================GuestCategories==========================================
     public function addGuestClassification(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -357,25 +506,44 @@ class Users extends Controller
             'name_en' => 'nullable|string|max:255|unique:guest_classifications,name_en',
             'description' => 'nullable|string|max:255',
             'discount_id' => 'nullable|numeric|exists:discounts,id',
-            'active' => 'nullable|in:0,1'   //0 for inactive, 1 for active
+            'feature_ids' => 'nullable|array',
+            'feature_ids.*' => 'numeric|exists:guests_features,id',
         ]);
-
         if ($validator->fails()) {
             return ['result' => 'failed', 'error' => $validator->errors()];
         }
-
+        DB::beginTransaction();
         try {
             $guestClassification = Guest_classification::create([
                 'name_ar' => $request->name_ar,
                 'name_en' => $request->name_en,
                 'description' => $request->description,
                 'discount_id' => $request->discount_id,
-                'active' => $request->active ?? 1
+                'active' =>  1
             ]);
+            if ($request->has('feature_ids')) {
+                // $this->addGuestClassificationFeature($guestClassification->id, $request->feature_ids);
+                $guestClassification->features()->sync($request->feature_ids);
+            }
+            $guestClassification->load(['features', 'discount']);
+            DB::commit();
             return ['result' => 'success', 'guest_classification' => $guestClassification];
         } catch (Exception $e) {
+            DB::rollBack();
             return ['result' => 'failed', 'error' => $e->getMessage()];
         }
+    }
+
+    public function addGuestClassificationFeature($id, $feature_ids)
+    {
+        $data = [];
+        foreach ($feature_ids as $fratID) {
+            $data[] = [
+                'guest_classification_id' => $id,
+                'guest_feature_id' => $fratID,
+            ];
+        }
+        Guest_classification_feature::insert($data);
     }
 
     public function updateGuestClassification(Request $request)
@@ -385,35 +553,33 @@ class Users extends Controller
             'name_ar' => 'nullable|string|unique:guest_classifications,name_ar,' . $request->id,
             'name_en' => 'nullable|string|unique:guest_classifications,name_en,' . $request->id,
             'description' => 'nullable|string',
-            'discount_id' => 'nullable|numeric|exists:discounts,id',
+            'discount_id' => 'nullable|numeric',
             'active' => 'nullable|boolean',   //0 for inactive, 1 for active
+            'feature_ids' => 'nullable|array',
+            'feature_ids.*' => 'numeric|exists:guests_features,id',
         ]);
 
         if ($validator->fails()) {
             return ['result' => 'failed', 'guest_classification' => '', 'error' => $validator->errors()];
         }
 
-        $guestClassification = Guest_classification::find($request->id);
-        $name_ar = $request->name_ar ?? $guestClassification->name_ar;
-        $name_en = $request->name_en ?? $guestClassification->name_en;
-        $description = $request->description ?? $guestClassification->description;
-        $discount_id = $request->discount_id ?? $guestClassification->discount_id;
-        $active = $request->active ?? $guestClassification->active;
+        try {
+            $guestClassification = Guest_classification::find($request->id);
 
-        $guestClassification->update([
-            'name_ar' => $name_ar,
-            'name_en' => $name_en,
-            'description' => $description,
-            'discount_id' => $discount_id,
-            'active' => $active,
-        ]);
+            $guestClassification->update([
+                'name_ar' => $request->name_ar,
+                'name_en' => $request->name_en,
+                'description' => $request->description,
+                'discount_id' => $request->discount_id == 0 ? null : $request->discount_id,
+                'active' => $request->active,
+            ]);
+            $guestClassification->features()->sync($request->feature_ids);
+            $guestClassification->load(['features', 'discount']);
 
-        return ['result' => 'success', 'error' => ''];
-    }
-
-    public function getGuestClassification()
-    {
-        return Guest_classification::all();
+            return ['result' => 'success', 'guest_classification' => $guestClassification];
+        } catch (Exception $e) {
+            return ['result' => 'failed', 'error' => $e->getMessage()];
+        }
     }
 
     public function deleteGuestClassification(Request $request)
@@ -425,14 +591,12 @@ class Users extends Controller
             return ['result' => 'failed', 'error' => $validator->errors()];
         }
         $guestClassification = Guest_classification::find($request->id);
-
-        if ($guestClassification->guest_classification_features()->exists()) {
-            return ['result' => 'failed', 'error' => 'The category cannot be deleted because it is linked to existing features'];
-        }
+        $guestClassification->features()->sync([]);
         $guestClassification->delete();
         return ['result' => 'success', 'error' => ''];
     }
-    //=====================================GuestFeature==========================================
+
+    //=====================================GuestFeature==============================================
     public function addGuestFeature(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -451,7 +615,7 @@ class Users extends Controller
             'feature_description' => $request->feature_description,
         ]);
 
-        return ['result' => 'success', 'guest_feature' => $guestFeature, 'error' => ''];
+        return ['result' => 'success', 'guestFeature' => $guestFeature, 'error' => ''];
     }
 
     public function getGuestFeature()
@@ -479,7 +643,7 @@ class Users extends Controller
             'name_en' => $name_en,
             'feature_description' => $feature_description,
         ]);
-        return ['result' => 'success', 'error' => ''];
+        return ['result' => 'success', 'error' => '', 'guestFeature' => $guestFeature];
     }
 
     public function deleteGuestFeature(Request $request)
@@ -502,61 +666,6 @@ class Users extends Controller
 
         return ['result' => 'success', 'error' => ''];
     }
-
-    //=====================================GuestClassiFicationFeature==============================
-    public function addGuestClassificationFeature(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'guest_classification_id' => 'required|numeric|exists:guest_classifications,id',
-            'guest_feature_id' => 'required|numeric|exists:guests_features,id',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        $exists = Guest_classification_feature::where('guest_classification_id', $request->guest_classification_id)->where('guest_feature_id', $request->guest_feature_id)->exists();
-
-        if ($exists) {
-            return ['result' => 'failed', 'error' => 'This guest classification is already linked to this feature.'];
-        }
-
-        $featureLink = new Guest_classification_feature();
-        $featureLink->guest_classification_id = $request->guest_classification_id;
-        $featureLink->guest_feature_id = $request->guest_feature_id;
-        $featureLink->save();
-
-        return ['result' => 'success', 'error' => ''];
-    }
-
-    public function deleteGuestClassificationFeature(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id' => 'required|numeric|exists:guest_classification_features,id',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        $record = Guest_classification_feature::find($request->id);
-
-        if (!$record) {
-            return ['result' => 'failed', 'error' => 'Record not found'];
-        }
-
-        try {
-            $record->delete();
-            return ['result' => 'success', 'error' => ''];
-        } catch (Exception $e) {
-            return ['result' => 'failed', 'error' => $e->getMessage()];
-        }
-    }
-
-    public function getGuestClassificationFeature()
-    {
-        return Guest_classification_feature::all();
-    }
     //=====================================StayReason==============================================
     public function addStayReason(Request $request)
     {
@@ -576,7 +685,7 @@ class Users extends Controller
             'description' => $request->description,
         ]);
 
-        return ['result' => 'success', 'reason' => $reason, 'error' => ''];
+        return ['result' => 'success', 'Reason' => $reason, 'error' => ''];
     }
 
     public function updateStayReason(Request $request)
@@ -589,7 +698,7 @@ class Users extends Controller
         ]);
 
         if ($validator->fails()) {
-            return ['result' => 'failed', 'reason' => '', 'error' => $validator->errors()];
+            return ['result' => 'failed', 'Reason' => '', 'error' => $validator->errors()];
         }
 
         $reason = Stay_reason::find($request->id);
@@ -604,13 +713,13 @@ class Users extends Controller
             'description' => $description,
         ]);
 
-        return ['result' => 'success', 'error' => ''];
+        return ['result' => 'success', 'Reason' => $reason, 'error' => ''];
     }
 
     public function deleteStayReason(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'id' => 'required|numeric|exists:Stay_reasons,id',
+            'id' => 'required|numeric|exists:stay_reasons,id',
         ]);
 
         if ($validator->fails()) {
@@ -623,6 +732,7 @@ class Users extends Controller
             if ($hasReservations) {
                 return ['result' => 'failed', 'error' => 'Cannot delete. This stay reason is linked to existing reservations.'];
             }
+            $stayReason->delete();
             return ['result' => 'success', 'error' => ''];
         } catch (Exception $e) {
             return ['result' => 'failed', 'error' => $e->getMessage()];
@@ -717,6 +827,7 @@ class Users extends Controller
             return ['result' => 'failed', 'error' => $e->getMessage()];
         }
     }
+
     public function getRoomFeature()
     {
         return Room_feature::all();
@@ -852,8 +963,9 @@ class Users extends Controller
     public function addReservationSource(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'NameAr' => 'required|string|max:255',
-            'NameEn' => 'required|string|max:255',
+            'name_ar' => 'required|string|max:255',
+            'name_en' => 'required|string|max:255',
+            'description' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -861,10 +973,10 @@ class Users extends Controller
         }
 
         $source = ReservationSource::create([
-            'NameAr' => $request->NameAr,
-            'NameEn' => $request->NameEn,
+            'name_ar' => $request->name_ar,
+            'name_en' => $request->name_en,
+            'description' => $request->description,
         ]);
-
         return ['result' => 'success', 'source' => $source, 'error' => ''];
     }
 
@@ -872,18 +984,16 @@ class Users extends Controller
     {
         $validator = Validator::make($request->all(), [
             'id' => 'required|numeric|exists:reservation_sources,id',
-            'NameAr' => 'nullable|string|max:255',
-            'NameEn' => 'nullable|string|max:255',
+            'name_ar' => 'required|string|max:255',
+            'name_en' => 'required|string|max:255',
+            'description' => 'nullable|string|max:255',
         ]);
-
         if ($validator->fails()) {
             return ['result' => 'failed', 'source' => '', 'error' => $validator->errors()];
         }
-
         $source = ReservationSource::find($request->id);
-        $source->update($request->only(['NameAr', 'NameEn']));
-
-        return ['result' => 'success', 'error' => ''];
+        $source->update($request->only(['name_ar', 'name_en', 'description']));
+        return ['result' => 'success', 'error' => '', 'source' => $source];
     }
 
     public function deleteReservationSource(Request $request)
@@ -918,43 +1028,81 @@ class Users extends Controller
             'first_name'              => 'required|string|max:255',
             'last_name'               => 'required|string|max:255',
             'email'                   => 'nullable|email|unique:mysql2.clients,email',
-            'international_code'      => 'required|string|unique:mysql2.clients,international_code',
+            'international_code'      => 'required|string',
             'mobile'                  => 'required|string|unique:mysql2.clients,mobile',
-            'nationality_id'          => 'nullable|numeric',
             'IdType'                  => 'required|in:ID,PASSPORT',
             'IdNumber'                => 'required|string|unique:mysql2.clients,IdNumber',
+            'nationality'             => 'required|string',
             'birth_date'              => 'nullable|date',
             'gender'                  => 'required|in:MALE,FEMALE',
-            'guest_classification_id' => 'numeric'
+            'guest_type'              => 'required|in:CITIZEN,RESIDENT,GULF CITIZEN,VISITOR',
+            'classifications_id'      => 'nullable|numeric|exists:guest_classifications,id'
         ]);
+
         if ($validator->fails()) {
             return ['result' => 'failed', 'error' => $validator->errors()];
         }
         try {
-            Client::create($request->all());
+            $cli = Client::create($request->all());
+            if ($request->has('classifications_id')) {
+                $this->addClientClassification($cli->id, $request->classifications_id);
+            }
             return ['result' => 'success', 'error' => ''];
         } catch (Exception $e) {
             return ['result' => 'failed', 'error' => $e->getMessage()];
         }
     }
 
-    public function getClientByMobile(Request $request)
+    public function addClientClassification($client_id, $classifications_id)
+    {
+        $client = Client::find($client_id);
+        if (!$client) {
+            return false;
+        }
+        $classification = Guest_classification::find($classifications_id);
+        if (!$classification) {
+            return false;
+        }
+        try {
+            $cc =  client_classifications::where('client_id', $client_id)->first();
+            if ($cc) {
+                $cc->delete();
+            }
+            $c = new Client_Classifications();
+            $c->client_id = $client_id;
+            $c->classifications_id = $classifications_id;
+            $c->save();
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    public function getClientBy(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'mobile' => 'required|string'
+            'by' => "required|string",
+            'value' => 'required|string',
+            'code' => 'required_if:by,mobile|string'
         ]);
         if ($validator->fails()) {
             return ['result' => 'failed', 'error' => $validator->errors()];
         }
-
-        $client = Client::where('mobile', $request->mobile)->first();
-
+        if ($request->by === 'mobile') {
+            // $client = DB::connection('checkinbookingclient')->table('Client')->where('international_code', $request->code)->where($request->by, $request->value)->first();
+            $client = Client::where('international_code', $request->code)->where('mobile', $request->value)->first();
+        } else {
+            // $client = DB::connection('checkinbookingclient')->table('Client')->where($request->by, $request->value)->first();
+            $client = Client::where('IdNumber', $request->value)->first();
+        }
         if ($client) {
-            return ['result' => 'success', 'data' => $client];
+            $classification = Client_Classifications::where('client_id', $client->id)->pluck('classifications_id')->first();
+            return ['.' => 'success', 'data' => $client, 'Classification' => $classification];
         } else {
             return ['result' => 'failed', 'message' => 'Client not found'];
         }
     }
+
     //=====================================Department=========================================================
 
     public function addDepartment(Request $request)
@@ -1021,6 +1169,7 @@ class Users extends Controller
             return ['result' => 'failed', 'error' => $e->getMessage()];
         }
     }
+
     public function updateDepartment(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -1066,10 +1215,12 @@ class Users extends Controller
 
         return ['result' => 'success', 'jobtitle' => $jobTitle, 'error' => ''];
     }
+
     public function getJobTitle(Request $request)
     {
         return Job_title::all();
     }
+
     public function getJobTitlesByDepartment(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -1108,103 +1259,6 @@ class Users extends Controller
         } catch (Exception $e) {
             return ['result' => 'failed', 'error' => $e->getMessage()];
         }
-    }
-
-    //=====================================Users===============================================================
-    public function addUser(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'name'          => 'required|string|max:255',
-            'job_number'    => 'required|string|unique:users,job_number',
-            'jobtitle_id'   => 'required|numeric|exists:jobtitles,id',
-            'department_id' => 'required|numeric|exists:departments,id',
-            'mobile'        => 'required|string|unique:users,mobile',
-            'email'         => 'required|email|unique:users,email',
-            'discount_id'   => 'nullable|numeric|exists:discounts,id',
-            'password'      => 'required|string|min:6',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        try {
-            $user = User::create([
-                'name'          => $request->name,
-                'job_number'    => $request->job_number,
-                'jobtitle_id'   => $request->jobtitle_id,
-                'department_id' => $request->department_id,
-                'mobile'        => $request->mobile,
-                'email'         => $request->email,
-                'discount_id'   => $request->discount_id,
-                'active'        => 1,
-                'password'      => Hash::make($request->password),
-            ]);
-
-            return ['result' => 'success', 'data' => $user];
-        } catch (Exception $e) {
-            return ['result' => 'failed', 'error' => $e->getMessage()];
-        }
-    }
-
-    public function updateUser(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id'            => 'nullable|numeric',
-            'jobtitle_id'   => 'nullable|numeric|exists:jobtitles,id',
-            'department_id' => 'nullable|numeric|exists:departments,id',
-            'mobile'        => 'nullable|string|unique:users,mobile,' . $request->id,
-            'email'         => 'nullable|email|unique:users,email,' . $request->id,
-            'discount_id'   => 'nullable|numeric|exists:discounts,id',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-        $user = User::find($request->id);
-
-        if (!$user) {
-            return ['result' => 'failed', 'error' => 'User not found'];
-        }
-
-        try {
-            $user->update($request->only([
-                'jobtitle_id',
-                'department_id',
-                'mobile',
-                'email',
-                'discount_id'
-            ]));
-
-            return ['result' => 'success', 'data' => $user];
-        } catch (Exception $e) {
-            return ['result' => 'failed', 'error' => $e->getMessage()];
-        }
-    }
-
-    public function deleteUser(Request $request)
-    {
-        $user = User::find($request->id);
-
-        if (!$user) {
-            return ['result' => 'failed', 'error' => 'User not found'];
-        }
-
-        try {
-            $user->active = 0;
-            $user->save();
-
-            return ['result' => 'success', 'message' => 'User deactivated successfully'];
-        } catch (Exception $e) {
-            return ['result' => 'failed', 'error' => $e->getMessage()];
-        }
-    }
-
-    public function getUsersByStatus()
-    {
-        $activeUsers   = User::where('active', 1)->get();
-        $inactiveUsers = User::where('active', 0)->get();
-        return ['result' => 'success', 'active_users' => $activeUsers, 'inactive_users' => $inactiveUsers];
     }
 
     //=====================================Permissions===============================================================
@@ -1288,44 +1342,194 @@ class Users extends Controller
     }
 
     //=====================================UserPermissions===========================================================
-    public function addPermissionUser(Request $request)
+
+    public function addUserPermission($user_id, $permission_ids)
+    {
+        User_permission::where('user_id', $user_id)->delete();
+        $data = [];
+        foreach ($permission_ids as $permID) {
+            $data[] = [
+                'user_id'      => $user_id,
+                'permission_id' => $permID,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ];
+        }
+        User_permission::insert($data);
+    }
+
+    //=====================================RoomType==================================================================
+
+    public function addRoomType(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'permission_id' => 'required|array',
-            'user_id' => 'required|exists:users,id',
+            'name_ar'     => 'required|string|max:255',
+            'name_en'     => 'required|string|max:255',
+            'description' => 'required|string|max:255',
+            'active_type' => 'required|numeric|in:0,1,2',
         ]);
         if ($validator->fails()) {
             return ['result' => 'failed', 'error' => $validator->errors()];
         }
-        DB::beginTransaction();
+        if ($request->active_type == 0) {
+            $validator = Validator::make($request->all(), [
+                'Min_daily_price'   => 'required|numeric|min:1',
+                'Min_monthly_price' => 'required|numeric|min:1',
+                'Min_yearly_price'  => 'required|numeric|min:1',
+            ]);
+        } else {
+            $validator = Validator::make($request->all(), [
+                'Min_daily_price'   => 'required|numeric|min:1',
+                'Max_daily_price'   => 'required|numeric|min:1',
+                'Min_monthly_price' => 'required|numeric|min:1',
+                'Max_monthly_price' => 'required|numeric|min:1',
+                'Min_yearly_price'  => 'required|numeric|min:1',
+                'Max_yearly_price'  => 'required|numeric|min:1',
+            ]);
+        }
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+        $roomType = RoomType::create([
+            'name_ar'           => $request->name_ar,
+            'name_en'           => $request->name_en,
+            'description'       => $request->description,
+            'Max_daily_price'   => $request->Max_daily_price ?? 0,
+            'Min_daily_price'   => $request->Min_daily_price,
+            'Max_monthly_price' => $request->Max_monthly_price ?? 0,
+            'Min_monthly_price' => $request->Min_monthly_price,
+            'Max_yearly_price'  => $request->Max_yearly_price ?? 0,
+            'Min_yearly_price'  => $request->Min_yearly_price,
+            'active_type'       => $request->active_type,
+        ]);
+        return ['result' => 'success', 'error' => '', 'data' => $roomType];
+    }
+
+    public function getRoomType()
+    {
+        return RoomType::all();
+    }
+
+    public function updateRoomType(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id'          => 'required|numeric|exists:room_types,id',
+            'name_ar'     => 'required|string|max:255',
+            'name_en'     => 'required|string|max:255',
+            'description' => 'required|string|max:255',
+            'active_type' => 'required|numeric|in:0,1,2',
+        ]);
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+        if ($request->active_type == 0) {
+            $validator = Validator::make($request->all(), [
+                'Min_daily_price'   => 'required|numeric|min:1',
+                'Min_monthly_price' => 'required|numeric|min:1',
+                'Min_yearly_price'  => 'required|numeric|min:1',
+            ]);
+        } else {
+            $validator = Validator::make($request->all(), [
+                'Min_daily_price'   => 'required|numeric|min:1',
+                'Max_daily_price'   => 'required|numeric|min:1',
+                'Min_monthly_price' => 'required|numeric|min:1',
+                'Max_monthly_price' => 'required|numeric|min:1',
+                'Min_yearly_price'  => 'required|numeric|min:1',
+                'Max_yearly_price'  => 'required|numeric|min:1',
+            ]);
+        }
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+
         try {
-            User_permission::where('UserId', $request->user_id)->delete();
-            $data = [];
-            foreach ($request->permission_id as $permID) {
-                $data[] = [
-                    'UserId' => $request->user_id,
-                    'PermissionId' => $permID,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
-            User_permission::insert($data);
-            DB::commit();
-            return ['result' => 'success', 'error' => ''];
+            $roomType = RoomType::findOrFail($request->id);
+
+            $roomType->update([
+                'name_ar'           => $request->name_ar,
+                'name_en'           => $request->name_en,
+                'description'       => $request->description,
+                'Max_daily_price'   => $request->Max_daily_price ?? 0,
+                'Min_daily_price'   => $request->Min_daily_price,
+                'Max_monthly_price' => $request->Max_monthly_price ?? 0,
+                'Min_monthly_price' => $request->Min_monthly_price,
+                'Max_yearly_price'  => $request->Max_yearly_price  ?? 0,
+                'Min_yearly_price'  => $request->Min_yearly_price,
+                'active_type'       => $request->active_type,
+            ]);
+
+            return ['result' => 'success', 'error' => '', 'data' => $roomType];
         } catch (Exception $e) {
-            DB::rollBack();
-            return ['result' => 'error', 'error' => 'Something went wrong. Please try again.'];
+            return ['result' => 'failed', 'error' => $e->getMessage()];
         }
     }
+
+    public function deleteRoomType(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|numeric|exists:room_types,id',
+        ]);
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+
+        try {
+            $roomType = RoomType::find($request->id);
+
+            if ($roomType->rooms()->exists()) {
+                return ['result' => 'failed', 'error'  => 'لا يمكن حذف نوع الغرفة لأنه مرتبط بغرف موجودة'];
+            }
+
+            $roomType->delete();
+
+            return ['result' => 'success', 'error' => ''];
+        } catch (Exception $e) {
+            return ['result' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
     //=====================================PricingPlan===============================================================
 
-    public function addPricingPlan(Request $request)
+    public function getRoomtypePricing()
+    {
+        $pricing = RoomtypePricingplan::with('pricingplan', 'roomType')->get();
+
+        $formatted = $pricing->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'roomtype_id' => $item->roomtype_id,
+                'roomtype_nameAr' => $item->roomType?->name_ar,
+                'roomtype_nameEn' => $item->roomType?->name_en,
+                'pricingplan_id' => $item->pricingplan_id,
+                'pricingplan_nameAr' => $item->pricingplan?->NameAr,
+                'pricingplan_nameEn' => $item->pricingplan?->NameEn,
+                'pricingplan_StartDate' => $item->pricingplan?->StartDate,
+                'pricingplan_EndDate' => $item->pricingplan?->EndDate,
+                'pricingplan_ActiveType' => $item->pricingplan?->ActiveType,
+                'DailyPrice' => $item->DailyPrice,
+                'MonthlyPrice' => $item->MonthlyPrice,
+                'YearlyPrice' => $item->YearlyPrice,
+            ];
+        });
+        return response()->json($formatted);
+    }
+
+    public function addRoomtypePricing(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'NameAr' => 'required|string|max:255',
             'NameEn' => 'required|string|max:255',
             'StartDate' => 'required|date',
             'EndDate' => 'required|date|after_or_equal:StartDate',
+            'roomtype_id' => 'required|exists:room_types,id',
+            'DailyPrice' => 'required|numeric|min:0',
+            'MonthlyPrice' => 'required|numeric|min:0',
+            'YearlyPrice' => 'required|numeric|min:0',
+            'ActiveType' => 'required|numeric|in:0 , 1 , 2',  //0->Const Price , 1=>For As Per Day , 2=>Plan Price
         ]);
 
         if ($validator->fails()) {
@@ -1333,156 +1537,145 @@ class Users extends Controller
         }
 
         try {
-            Pricingplan::create([
+            DB::beginTransaction();
+
+            $pricingPlan = Pricingplan::create([
                 'NameAr' => $request->NameAr,
                 'NameEn' => $request->NameEn,
                 'StartDate' => $request->StartDate,
                 'EndDate' => $request->EndDate,
+                'ActiveType' => $request->ActiveType,
             ]);
 
-            return ['result' => 'success', 'error' => ''];
-        } catch (Exception $e) {
-            return ['result' => 'error', 'error' => 'Something went wrong. Please try again.' . $e];
-        }
-    }
-
-    public function getAllPricingplans()
-    {
-        $plans = Pricingplan::all();
-        return ['result' => 'success', 'data' => $plans];
-    }
-
-    public function getPricingplansByDate(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'StartDate' => 'required|date',
-            'EndDate' => 'required|date|after_or_equal:StartDate',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        try {
-            $plans = Pricingplan::where('StartDate', '>=', $request->StartDate)->where('EndDate', '<=', $request->EndDate)->get();
-            return ['result' => 'success', 'data' => $plans];
-        } catch (Exception $e) {
-            return ['result' => 'error', 'error' => 'Something went wrong. Please try again.'];
-        }
-    }
-
-    public function updatePricingplan(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id' => 'required|exists:pricingplans,id',
-            'NameAr' => 'sometimes|string|max:255',
-            'NameEn' => 'sometimes|string|max:255',
-            'StartDate' => 'sometimes|date',
-            'EndDate' => 'sometimes|date',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        try {
-            $plan = Pricingplan::find($request->id);
-            if (!$plan) {
-                return ['result' => 'error', 'error' => 'Pricing plan not found'];
-            }
-
-            if ($request->has('NameAr')) $plan->NameAr = $request->NameAr;
-            if ($request->has('NameEn')) $plan->NameEn = $request->NameEn;
-            if ($request->has('StartDate')) $plan->StartDate = $request->StartDate;
-            if ($request->has('EndDate')) $plan->EndDate = $request->EndDate;
-
-            $plan->save();
-
-            return ['result' => 'success', 'error' => ''];
-        } catch (Exception $e) {
-            return ['result' => 'error', 'error' => 'Something went wrong. Please try again.'];
-        }
-    }
-
-    public function deletePricingplan(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id' => 'required|exists:pricingplans,id',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        try {
-            Pricingplan::where('id', $request->id)->delete();
-            return ['result' => 'success', 'error' => ''];
-        } catch (Exception $e) {
-            return ['result' => 'error', 'error' => 'Something went wrong. Please try again.'];
-        }
-    }
-
-    public function addRoomtypePricingplan(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'roomtype_id' => 'required|exists:room_types,id',
-            'pricingplan_id' => 'required|exists:pricing_plans,id',
-            'DailyPrice' => 'required|numeric|min:0',
-            'MonthlyPrice' => 'required|numeric|min:0',
-            'YearlyPrice' => 'required|numeric|min:0',
-        ]);
-
-        if ($validator->fails()) {
-            return ['result' => 'failed', 'error' => $validator->errors()];
-        }
-
-        try {
-            RoomtypePricingplan::create([
+            $roomTypePricing = RoomtypePricingplan::create([
                 'roomtype_id' => $request->roomtype_id,
-                'pricingplan_id' => $request->pricingplan_id,
+                'pricingplan_id' => $pricingPlan->id,
                 'DailyPrice' => $request->DailyPrice,
                 'MonthlyPrice' => $request->MonthlyPrice,
                 'YearlyPrice' => $request->YearlyPrice,
             ]);
-            return ['result' => 'success', 'error' => ''];
+
+            DB::commit();
+            $data = [
+                'id' => $roomTypePricing->id,
+                'roomtype_id' => $roomTypePricing->roomtype_id,
+                'roomtype_nameAr' => $roomTypePricing->roomType->name_ar ?? '',
+                'roomtype_nameEn' => $roomTypePricing->roomType->name_en ?? '',
+                'pricingplan_id' => $pricingPlan->id,
+                'pricingplan_nameAr' => $pricingPlan->NameAr,
+                'pricingplan_nameEn' => $pricingPlan->NameEn,
+                'pricingplan_StartDate' => $pricingPlan->StartDate,
+                'pricingplan_EndDate' => $pricingPlan->EndDate,
+                'pricingplan_ActiveType' => $pricingPlan->ActiveType,
+                'DailyPrice' => $roomTypePricing->DailyPrice,
+                'MonthlyPrice' => $roomTypePricing->MonthlyPrice,
+                'YearlyPrice' => $roomTypePricing->YearlyPrice,
+            ];
+            return ['result' => 'success', 'data' => $data, 'error' => ''];
         } catch (Exception $e) {
-            return ['result' => 'error', 'error' => 'Something went wrong. Please try again.' . $e];
+            DB::rollBack();
+            return ['result' => 'error', 'error' => 'Something went wrong. ' . $e->getMessage()];
         }
     }
 
-    public function getRoomtypePricingByDate(Request $request)
+    public function updateRoomtypePricing(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'roomtype_id' => 'required|exists:room_types,id',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
+            'id'             => 'required|exists:roomtype_pricingplan,id',
+            'pricingplan_id' => 'required|exists:pricing_plans,id',
+            'roomtype_id'    => 'required|exists:room_types,id',
+            'NameAr'         => 'required|string|max:255',
+            'NameEn'         => 'required|string|max:255',
+            'StartDate'      => 'required|date',
+            'EndDate'        => 'required|date|after_or_equal:StartDate',
+            'DailyPrice'     => 'required|numeric|min:0',
+            'MonthlyPrice'   => 'required|numeric|min:0',
+            'YearlyPrice'    => 'required|numeric|min:0',
+            'ActiveType' => 'required|numeric|in:0 , 1 , 2',  //0->Const Price , 1=>For As Per Day , 2=>Plan Price
+
+        ]);
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+        try {
+            DB::beginTransaction();
+            $pricingPlan = Pricingplan::findOrFail($request->pricingplan_id);
+            $pricingPlan->update([
+                'NameAr'    => $request->NameAr,
+                'NameEn'    => $request->NameEn,
+                'StartDate' => $request->StartDate,
+                'EndDate'   => $request->EndDate,
+                'ActiveType' => $request->ActiveType,
+            ]);
+            $roomTypePricing = RoomtypePricingplan::findOrFail($request->id);
+            $roomTypePricing->update([
+                'roomtype_id'    => $request->roomtype_id,
+                'pricingplan_id' => $pricingPlan->id,
+                'DailyPrice'     => $request->DailyPrice,
+                'MonthlyPrice'   => $request->MonthlyPrice,
+                'YearlyPrice'    => $request->YearlyPrice,
+            ]);
+            DB::commit();
+            $data = [
+                'id'                    => $roomTypePricing->id,
+                'roomtype_id'           => $roomTypePricing->roomtype_id,
+                'roomtype_nameAr'       => $roomTypePricing->roomType->name_ar ?? '',
+                'roomtype_nameEn'       => $roomTypePricing->roomType->name_en ?? '',
+                'pricingplan_id'        => $pricingPlan->id,
+                'pricingplan_nameAr'    => $pricingPlan->NameAr,
+                'pricingplan_nameEn'    => $pricingPlan->NameEn,
+                'pricingplan_StartDate' => $pricingPlan->StartDate,
+                'pricingplan_EndDate'   => $pricingPlan->EndDate,
+                'pricingplan_ActiveType' => $pricingPlan->ActiveType,
+                'DailyPrice'            => $roomTypePricing->DailyPrice,
+                'MonthlyPrice'          => $roomTypePricing->MonthlyPrice,
+                'YearlyPrice'           => $roomTypePricing->YearlyPrice,
+            ];
+            return ['result' => 'success', 'data' => $data, 'error' => ''];
+        } catch (Exception $e) {
+            DB::rollBack();
+            return ['result' => 'error', 'error' => 'Something went wrong. ' . $e->getMessage()];
+        }
+    }
+
+    public function deleteRoomtypePricing(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|exists:roomtype_pricingplan,id',
         ]);
 
         if ($validator->fails()) {
             return ['result' => 'failed', 'error' => $validator->errors()];
         }
 
-        $pricing = RoomtypePricingplan::where('roomtype_id', $request->roomtype_id)
-            ->whereHas('pricingplan', function ($query) use ($request) {
-                $query->where('StartDate', '<=', $request->start_date)
-                    ->where('EndDate', '>=', $request->end_date);
-            })->first();
+        try {
+            DB::beginTransaction();
 
-        if (!$pricing) {
-            return ['result' => 'not_found', 'error' => 'No active pricing plan found for this date.'];
+            $roomTypePricing = RoomtypePricingplan::findOrFail($request->id);
+            $pricingPlanId = $roomTypePricing->pricingplan_id;
+            $roomTypePricing->delete();
+
+            $pricingPlan = Pricingplan::find($pricingPlanId);
+            if ($pricingPlan) {
+                $pricingPlan->delete();
+            }
+
+            DB::commit();
+
+            return ['result' => 'success', 'error' => ''];
+        } catch (Exception $e) {
+            DB::rollBack();
+            return ['result' => 'error', 'error' => 'Something went wrong. ' . $e->getMessage()];
         }
-        // return ['result' => 'success', 'data' => $pricing];
-        return ['result' => 'success', 'data' => ['DailyPrice' => $pricing->DailyPrice, 'MonthlyPrice' => $pricing->MonthlyPrice, 'YearlyPrice' => $pricing->YearlyPrice, 'plan_nameEn' => $pricing->pricingplan->NameEn, 'plan_nameAr' => $pricing->pricingplan->NameAr]];
     }
 
     //=====================================PeakDaysCheck=============================================================
-
     public function updatePeakDaysCheck(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'days' => 'required|array|min:1',
             'days.*.id' => 'required|exists:peak_days,id',
-            'days.*.check' => 'required|in:0,1,2',
+            'days.*.check' => 'required|in:0,1',  //0=Normal, 1=Peak day
         ]);
 
         if ($validator->fails()) {
@@ -1494,5 +1687,75 @@ class Users extends Controller
         }
 
         return ['result' => 'success', 'message' => 'Check values updated successfully.'];
+    }
+
+    public function seedWeekDays()
+    {
+        $days = [
+            ['day_name_en' => 'Saturday',   'day_name_ar' => 'السبت'],
+            ['day_name_en' => 'Sunday',     'day_name_ar' => 'الأحد'],
+            ['day_name_en' => 'Monday',     'day_name_ar' => 'الاثنين'],
+            ['day_name_en' => 'Tuesday',    'day_name_ar' => 'الثلاثاء'],
+            ['day_name_en' => 'Wednesday',  'day_name_ar' => 'الأربعاء'],
+            ['day_name_en' => 'Thursday',   'day_name_ar' => 'الخميس'],
+            ['day_name_en' => 'Friday',     'day_name_ar' => 'الجمعة'],
+        ];
+
+        foreach ($days as $day) {
+            PeakDay::updateOrCreate(
+                ['day_name_en' => $day['day_name_en']],
+                ['day_name_ar' => $day['day_name_ar'], 'check' => 0]
+            );
+        }
+
+        return response()->json(['message' => 'Weekdays seeded successfully'], 200);
+    }
+
+    //=====================================PeakMonthsCheck=============================================================
+
+    public function updatePeakMonthsCheck(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'months' => 'required|array|min:1',
+            'months.*.id' => 'required|exists:peak_months,id',
+            'months.*.check' => 'required|in:0,1', // 0=Normal, 1=Peak month
+        ]);
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+
+        foreach ($request->months as $month) {
+            PeakMonth::where('id', $month['id'])->update(['check' => $month['check']]);
+        }
+
+        return ['result' => 'success', 'message' => 'Check values updated successfully.'];
+    }
+
+    public function seedMonths()
+    {
+        $months = [
+            ['month_name_en' => 'January',   'month_name_ar' => 'يناير'],
+            ['month_name_en' => 'February',  'month_name_ar' => 'فبراير'],
+            ['month_name_en' => 'March',     'month_name_ar' => 'مارس'],
+            ['month_name_en' => 'April',     'month_name_ar' => 'أبريل'],
+            ['month_name_en' => 'May',       'month_name_ar' => 'مايو'],
+            ['month_name_en' => 'June',      'month_name_ar' => 'يونيو'],
+            ['month_name_en' => 'July',      'month_name_ar' => 'يوليو'],
+            ['month_name_en' => 'August',    'month_name_ar' => 'أغسطس'],
+            ['month_name_en' => 'September', 'month_name_ar' => 'سبتمبر'],
+            ['month_name_en' => 'October',   'month_name_ar' => 'أكتوبر'],
+            ['month_name_en' => 'November',  'month_name_ar' => 'نوفمبر'],
+            ['month_name_en' => 'December',  'month_name_ar' => 'ديسمبر'],
+        ];
+
+        foreach ($months as $month) {
+            PeakMonth::updateOrCreate(
+                ['month_name_en' => $month['month_name_en']],
+                ['month_name_ar' => $month['month_name_ar'], 'check' => 0]
+            );
+        }
+
+        return response()->json(['message' => 'Months seeded successfully'], 200);
     }
 }

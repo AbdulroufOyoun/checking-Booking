@@ -11,18 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('guest_classification_features', function (Blueprint $table) {
+        Schema::create('client_classifications', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('guest_classification_id')->comment('ID of the guest classification');
-            $table->unsignedBigInteger('guest_feature_id')->comment('ID of the guest feature');
+            $table->unsignedBigInteger('classifications_id');
+            $table->foreign('classifications_id')->references('id')->on('guest_classifications');
+            $table->unsignedBigInteger('client_id');
         });
     }
 
     /**
      * Reverse the migrations.
      */
+
     public function down(): void
     {
-        Schema::dropIfExists('guest_classification_features');
+        Schema::dropIfExists('client_classifications');
     }
 };

@@ -14,11 +14,11 @@ class Client extends Model
         'email',
         'international_code',
         'mobile',
-        'nationality_id',
         'IdType',
         'IdNumber',
         'birth_date',
         'gender',
-        'guest_classification_id'
+        'guest_type',
+        'nationality',
     ];
 }

@@ -11,6 +11,7 @@ class Job_title extends Model
 {
     use HasFactory;
 
+    protected $table = 'jobtitles';
 
     protected $fillable = ['jobtitle', 'department_id'];
 

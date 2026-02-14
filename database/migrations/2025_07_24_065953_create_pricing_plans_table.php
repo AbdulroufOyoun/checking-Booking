@@ -19,6 +19,7 @@ class CreatePricingplansTable extends Migration
             $table->string('NameEn', 255);
             $table->date('StartDate');
             $table->date('EndDate');
+            $table->tinyInteger("ActiveType")->comment("0->Const Price , 1=>For As Per Day , 2=>Plan Price");
             $table->timestamps();
         });
     }

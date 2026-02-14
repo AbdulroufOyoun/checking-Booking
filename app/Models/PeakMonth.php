@@ -5,9 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ReservationSource extends Model
+class PeakMonth extends Model
 {
     use HasFactory;
-    public $table = 'reservation_sources';
-    protected $fillable = ['name_ar', 'name_en', 'description'];
+    protected $table = 'peak_months';
+
+    protected $fillable = ['month_name_ar', 'month_name_en', 'check'];
 }

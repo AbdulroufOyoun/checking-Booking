@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::connection('mysql2')->create('nationalities', function (Blueprint $table) {
+        Schema::create('peak_months', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->unique()->comment('Name of the nationality');
+            $table->string('month_name_ar', 50);
+            $table->string('month_name_en', 50);
+            $table->tinyInteger('check')->default(0)->comment('0=Normal, 1=Peak Month');
             $table->timestamps();
         });
     }
@@ -23,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('mysql2')->dropIfExists('nationalities');
+        Schema::dropIfExists('peak_months');
     }
 };

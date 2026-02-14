@@ -1,13 +1,28 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Users;
+use App\Http\Controllers\Buildings;
 
 
-Route::post('login', [Users::class, 'loginStudent']);
+Route::post('login', [Users::class, 'login']);
 
 // Route::group(['middleware' => 'auth:sanctum'], function () {
+//=========================================Buildings=============================================
+Route::post('addBuilding', [Buildings::class, 'addBuilding']);
+Route::post('addFloor', [Buildings::class, 'addFloor']);
+Route::post('addSuite', [Buildings::class, 'addSuite']);
+Route::post('addRoom', [Buildings::class, 'addRoom']);
+Route::post('deleteRoom', [Buildings::class, 'deleteRoom']);
+Route::post('deleteFloor', [Buildings::class, 'deleteFloor']);
+Route::post('deleteSuite', [Buildings::class, 'deleteSuite']);
+Route::post('deleteBuilding', [Buildings::class, 'deleteBuilding']);
+Route::post('updateRoom', [Buildings::class, 'updateRoom']);
+Route::post('updateSuite', [Buildings::class, 'updateSuite']);
+Route::post('updateFloor', [Buildings::class, 'updateFloor']);
+Route::post('updateBuilding', [Buildings::class, 'updateBuilding']);
+Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
+Route::post('addMultiRoom', [Buildings::class, 'addMultiRoom']);
 //=====================================Discounts=================================================
 Route::post('addDiscount', [Users::class, 'addDiscount']);
 Route::post('updateDiscount', [Users::class, 'updateDiscount']);
@@ -16,17 +31,12 @@ Route::get('getDiscounts', [Users::class, 'getDiscounts']);
 //=====================================GuestClassification=======================================
 Route::post('addGuestClassification', [Users::class, 'addGuestClassification']);
 Route::post('updateGuestClassification', [Users::class, 'updateGuestClassification']);
-Route::get('getGuestClassification', [Users::class, 'getGuestClassification']);
 Route::post('deleteGuestClassification', [Users::class, 'deleteGuestClassification']);
 //=====================================GuestFeature==============================================
 Route::post('addGuestFeature', [Users::class, 'addGuestFeature']);
 Route::post('updateGuestFeature', [Users::class, 'updateGuestFeature']);
 Route::post('deleteGuestFeature', [Users::class, 'deleteGuestFeature']);
 Route::get('getGuestFeature', [Users::class, 'getGuestFeature']);
-//=====================================GuestClassiFicationFeature================================
-Route::post('addGuestClassificationFeature', [Users::class, 'addGuestClassificationFeature']);
-Route::post('deleteGuestClassificationFeature', [Users::class, 'deleteGuestClassificationFeature']);
-Route::get('getGuestClassificationFeature', [Users::class, 'getGuestClassificationFeature']);
 //=====================================StayReason================================================
 Route::post('/addStayReason', [Users::class, 'addStayReason']);
 Route::post('/updateStayReason', [Users::class, 'updateStayReason']);
@@ -58,7 +68,7 @@ Route::post('/deleteReservationSource', [Users::class, 'deleteReservationSource'
 Route::get('/getReservationSource', [Users::class, 'getReservationSource']);
 //=====================================Clients====================================================
 Route::post('/addClient', [Users::class, 'addClient']);
-Route::post('/getClientByMobile', [Users::class, 'getClientByMobile']);
+Route::post('/getClientBy', [Users::class, 'getClientBy']);
 //=====================================Department=================================================
 Route::post('/addDepartment', [Users::class, 'addDepartment']);
 Route::get('/getDepartment', [Users::class, 'getDepartment']);
@@ -71,19 +81,27 @@ Route::post('/getJobTitlesByDepartment', [Users::class, 'getJobTitlesByDepartmen
 //=====================================Users======================================================
 Route::post('/addUser', [Users::class, 'addUser']);
 Route::post('/updateUser', [Users::class, 'updateUser']);
-Route::post('/deleteUser', [Users::class, 'deleteUser']);
-Route::get('/getUsersByStatus', [Users::class, 'getUsersByStatus']);
+Route::post('/inActiveUser', [Users::class, 'inActiveUser']);
+Route::get('/getInfoUsers', [Users::class, 'getInfoUsers']);
 //=====================================Permissions=================================================
 Route::get('/addPermissions', [Users::class, 'addPermissions']);
 //=====================================PermissionUser==============================================
-Route::get('/addPermissionUser', [Users::class, 'addPermissionUser']);
+Route::get('/addUserPermission', [Users::class, 'addUserPermission']);
 //=====================================PricingPlan=================================================
-Route::post('/addPricingPlan', [Users::class, 'addPricingPlan']);
-Route::post('/getPricingplansByDate', [Users::class, 'getPricingplansByDate']);
-Route::post('/getRoomtypePricingByDate', [Users::class, 'getRoomtypePricingByDate']);
-Route::post('/addRoomtypePricingplan', [Users::class, 'addRoomtypePricingplan']);
+Route::get('/getRoomtypePricing', [Users::class, 'getRoomtypePricing']);
+Route::post('/addRoomtypePricing', [Users::class, 'addRoomtypePricing']);
+Route::post('/updateRoomtypePricing', [Users::class, 'updateRoomtypePricing']);
+Route::post('/deleteRoomtypePricing', [Users::class, 'deleteRoomtypePricing']);
 //=====================================PeakDaysCheck===============================================
 Route::post('/updatePeakDaysCheck', [Users::class, 'updatePeakDaysCheck']);
+Route::get('/seedWeekDays', [Users::class, 'seedWeekDays']);
+//=====================================PeakMonthsCheck===============================================
+Route::post('/updatePeakMonthsCheck', [Users::class, 'updatePeakMonthsCheck']);
+Route::get('/seedMonths', [Users::class, 'seedMonths']);
+//=====================================RoomType====================================================
+Route::post('/addRoomType', [Users::class, 'addRoomType']);
+Route::post('/updateRoomType', [Users::class, 'updateRoomType']);
+Route::post('/deleteRoomType', [Users::class, 'deleteRoomType']);
 
 
 // });

@@ -17,4 +17,17 @@ class Guest_classification extends Model
     {
         return $this->hasMany(Guest_classification_feature::class);
     }
+    function features()
+    {
+        return $this->belongsToMany(
+            Guest_feature::class,
+            'guest_classification_features',
+            'guest_classification_id',
+            'guest_feature_id'
+        );
+    }
+    function discount()
+    {
+        return $this->belongsTo(Discount::class, 'discount_id');
+    }
 }

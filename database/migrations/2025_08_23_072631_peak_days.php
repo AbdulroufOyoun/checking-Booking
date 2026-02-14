@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('day_name_ar', 50);
             $table->string('day_name_en', 50);
-            $table->tinyInteger('check')->default(0)->comment('0=Normal, 1=Peak day, 2=Day before peak');
+            $table->tinyInteger('check')->default(0)->comment('0=Normal, 1=Peak day');
             $table->timestamps();
         });
     }

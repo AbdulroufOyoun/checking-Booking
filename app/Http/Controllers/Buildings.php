@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Facilitie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Building;
@@ -12,7 +11,13 @@ use App\Models\Room;
 use App\Messages;
 use Exception;
 use App\Models\RoomType;
-
+use App\Models\Permission;
+use App\Models\User;
+use App\Http\Resources\UserResource;
+use App\Models\Discount;
+use App\Models\Guest_classification;
+use App\Models\Guest_feature;
+use App\Models\Guest_classification_feature;
 use Illuminate\Support\Facades\DB;
 
 
@@ -91,30 +96,39 @@ class Buildings extends Controller
             'building_id' => 'required|numeric|exists:buildings,id',
             'floor_id' => 'required|numeric|exists:floors,id',
             'number' => 'required|numeric',
-            // 'room_ids' => 'required',
             'lock_id' => 'nullable|string|unique:suites,lock_id',
+            'rooms' => 'required|array|min:1',
+            'rooms.*.id' => 'required|exists:rooms,id',
         ]);
+
         if ($validation->fails()) {
             return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 422);
         }
+
         if ($this->checkSuiteInBuilding($request->building_id, $request->number)) {
             return ['result' => 'failed', 'code' => -1, 'suite' => '', 'error' => 'The suite already exists.'];
         }
+
         DB::beginTransaction();
         try {
-            $suite = new Suite();
-            $suite->building_id = $request->building_id;
-            $suite->floor_id = $request->floor_id;
-            $suite->number = $request->number;
-            if ($request->has('lock_id')) {
-                $suite->lock_id = $request->lock_id;
+            $suite = Suite::create([
+                'building_id' => $request->building_id,
+                'floor_id' => $request->floor_id,
+                'number' => $request->number,
+                'suiteStatus' => 0,
+                'active' => 1,
+                'lock_id' => $request->lock_id ?? null,
+            ]);
+
+            if ($suite) {
+                $roomIds = collect($request->rooms)->pluck('id');
+                Room::whereIn('id', $roomIds)->update(['suite_id' => $suite->id]);
+                DB::commit();
+                return ['result' => 'success', 'code' => 1, 'suite' => $suite->load('rooms'), 'error' => ''];
             }
-            $suite->save();
-            // $Ids = explode("-", $request->room_ids);
-            // Room::whereIn('id', $Ids)->update(['suite_id' => $suite->id]);
-            // $rooms = Room::whereIn('id', $Ids)->get();
-            DB::commit();
-            return ['result' => 'success', 'code' => 1, 'suite' => $suite, 'error' => ''];
+
+            DB::rollBack();
+            return ['result' => 'failed', 'code' => -1, 'suite' => '', 'error' => "The suite has not been added"];
         } catch (Exception $e) {
             DB::rollBack();
             return ['result' => 'failed', 'code' => -1, 'suite' => '', 'error' => $e->getMessage()];
@@ -142,17 +156,12 @@ class Buildings extends Controller
         $room = new Room();
         $room->building_id = $request->building_id;
         $room->floor_id = $request->floor_id;
-        if ($request->has('suite_id')) {
-            $room->suite_id = $request->suite_id;
-        }
+        $room->suite_id = null;
         $room->number = $request->number;
+        $room->capacity = $request->capacity ?? 0;
+        $room->roomStatus = 1;
         $room->room_type_id = $request->room_type_id;
-        if ($request->has('capacity')) {
-            $room->capacity = $request->capacity;
-        }
-        if ($request->has('lock_id')) {
-            $room->lock_id = $request->lock_id;
-        }
+        $room->active = 1;
         try {
             $room->save();
             return ['result' => 'success', 'code' => 1, 'room' => $room, 'error' => ''];
@@ -206,11 +215,11 @@ class Buildings extends Controller
                 $newRoom->building_id = $request->buildingId;
                 $newRoom->floor_id = $request->floorId;
                 $newRoom->number = $request->numberRoom + $i;
-                if ($request->has('capacity')) {
-                    $newRoom->capacity = $request->capacity;
-                }
+                $newRoom->capacity = $request->capacity ?? 0;
                 $newRoom->room_type_id = $request->typeRoom;
                 $newRoom->suite_id = null;
+                $newRoom->roomStatus = 1;
+                $newRoom->active = 1;
                 $newRoom->save();
                 $rooms[] = $newRoom;
             }
@@ -220,8 +229,16 @@ class Buildings extends Controller
         }
     }
     //=====================================GET===============================================
-    public function getBuildingData()
+    public function getBuildingData(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|numeric|exists:users,id',
+        ]);
+
+        if ($validator->fails()) {
+            return ['result' => 'failed', 'error' => $validator->errors()];
+        }
+
         $building = Building::where("active", 1)->with([
             'floors' => function ($query) {
                 $query->where('active', 1);
@@ -241,7 +258,12 @@ class Buildings extends Controller
             }
         ])->get();
         $roomType = RoomType::all();
-        return ['result' => 'success', 'code' => 1, 'Buildings' => $building, 'RoomType' => $roomType];
+        $permissions = Permission::all();
+        $discount = Discount::all();
+        $user = User::find($request->user_id);
+        $user->load(['jobtitle', 'department', 'discount', 'permissions']);
+        $classification = Guest_classification::with(['features', 'discount'])->get();
+        return ['result' => 'success', 'code' => 1, "user"   => new UserResource($user), 'Buildings' => $building, 'RoomType' => $roomType, 'permissions' => $permissions, 'Discount' => $discount, 'classification' => $classification];
     }
     //=====================================DELETE===============================================
     public function deleteRoom(Request $request)
@@ -274,6 +296,8 @@ class Buildings extends Controller
         $validation = Validator::make($request->all(), [
             'id_building' => "required|numeric|exists:buildings,id",
             'id_suite' => "required|numeric|exists:suites,id",
+            'delete_rooms' => "required|boolean" // 0 or 1
+
         ]);
         if ($validation->fails()) {
             return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 200);
@@ -293,16 +317,27 @@ class Buildings extends Controller
         if ($hasReservation) {
             $suite->active = 0;
             $suite->save();
-            foreach ($suite->rooms as $room) {
-                $room->active = 0;
-                $room->save();
+            if ($request->delete_rooms) {
+                foreach ($suite->rooms as $room) {
+                    $room->active = 0;
+                    $room->save();
+                }
             }
             return ['result' => 'success', 'code' => 1, "error" => ""];
         }
         DB::beginTransaction();
         try {
-            foreach ($suite->rooms as $room) {
-                $room->delete();
+            if ($request->delete_rooms) {
+                // حذف الغرف مع السويت
+                foreach ($suite->rooms as $room) {
+                    $room->delete();
+                }
+            } else {
+                // نخلي الغرف مستقلة (suite_id = null)
+                foreach ($suite->rooms as $room) {
+                    $room->suite_id = null;
+                    $room->save();
+                }
             }
             $suite->delete();
             DB::commit();
@@ -386,41 +421,6 @@ class Buildings extends Controller
                 DB::commit();
                 return ['result' => 'success', 'code' => 1, "error" => ""];
             }
-        } catch (Exception $e) {
-            DB::rollBack();
-            return ['result' => 'failed', 'code' => -1, "error" => $e->getMessage()];
-        }
-    }
-    public function deleteBuilding1(Request $request)
-    {
-        $validation = Validator::make($request->all(), [
-            'id_building' => "required|numeric|exists:buildings,id",
-        ]);
-        if ($validation->fails()) {
-            return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 200);
-        }
-        $building = Building::find($request->id_building);
-
-        $singleRoom = Room::where('building_id', $request->id_building)->where('suite_id', 0)->get();
-        DB::beginTransaction();
-        try {
-            foreach ($singleRoom as $room) {
-                $room->delete();
-            }
-
-            foreach ($building->floors as $floor) {
-                foreach ($floor->suites as $suite) {
-                    foreach ($suite->rooms as $room) {
-                        $room->delete();
-                    }
-                    $suite->delete();
-                }
-                $floor->delete();
-            }
-            $building->delete();
-
-            DB::commit();
-            return ['result' => 'success', 'code' => 1, "error" => ""];
         } catch (Exception $e) {
             DB::rollBack();
             return ['result' => 'failed', 'code' => -1, "error" => $e->getMessage()];
@@ -510,7 +510,7 @@ class Buildings extends Controller
         $validation = Validator::make($request->all(), [
             'id' => 'required|numeric|exists:rooms,id',
             'number' => 'nullable|string',
-            'suite_id' => 'nullable|numeric|exists:suites,id',
+            // 'suite_id' => 'nullable|numeric|exists:suites,id',
             'room_type_id' => 'nullable|numeric|exists:room_types,id',
             'capacity' => 'nullable|numeric',
         ]);
@@ -526,15 +526,15 @@ class Buildings extends Controller
             }
         }
 
-        if ($request->has('room_types_id')) {
-            $room->room_types_id = $request->room_types_id;
+        if ($request->has('room_type_id')) {
+            $room->room_type_id = $request->room_type_id;
         }
         if ($request->has('capacity')) {
             $room->capacity = $request->capacity;
         }
-        if ($request->has('suite_id')) {
-            $room->suite_id = $request->suite_id;
-        }
+        // if ($request->has('suite_id')) {
+        //     $room->suite_id = $request->suite_id;
+        // }
         try {
             $room->update();
             return ['result' => 'success', 'code' => 1, "error" => ""];
@@ -547,21 +547,43 @@ class Buildings extends Controller
         $validation = Validator::make($request->all(), [
             'id' => 'required|numeric|exists:suites,id',
             'number' => 'nullable|string',
-
+            'room_ids_to_add' => 'nullable|array',
+            'room_ids_to_add.*' => 'numeric|exists:rooms,id',
+            'room_ids_to_remove' => 'nullable|array',
+            'room_ids_to_remove.*' => 'numeric|exists:rooms,id',
         ]);
+
         if ($validation->fails()) {
             return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 200);
         }
+
         $suite = Suite::find($request->id);
+
         try {
+            // تحقق من رقم السويت إذا تغير
             if ($suite->number !== $request->number && $this->checkSuiteInBuilding($suite->building_id, $request->number)) {
                 return ['result' => 'failed', 'code' => -1, 'suite' => '', 'error' => 'The suite already exists.'];
             }
-            $suite->number = $request->number;
-            $suite->update();
-            return ['result' => 'success', 'code' => 1, "error" => ""];
+
+            if ($request->number) {
+                $suite->number = $request->number;
+                $suite->save();
+            }
+
+            // إذا في غرف للإضافة
+            if ($request->has('room_ids_to_add')) {
+                Room::whereIn('id', $request->room_ids_to_add)->update(['suite_id' => $suite->id]);
+            }
+
+            // إذا في غرف للحذف
+            if ($request->has('room_ids_to_remove')) {
+                Room::whereIn('id', $request->room_ids_to_remove)->update(['suite_id' => null]);
+            }
+
+            return ['result' => 'success', 'code' => 1, 'suite' => $suite->load('rooms')]; // يرجع السويت مع الغرف المحدثة'error' => ''
+
         } catch (Exception $e) {
-            return ['result' => 'failed', 'code' => -1, "error" => $e->getMessage()];
+            return ['result' => 'failed', 'code' => -1, 'error' => $e->getMessage()];
         }
     }
     public function updateFloor(Request $request)

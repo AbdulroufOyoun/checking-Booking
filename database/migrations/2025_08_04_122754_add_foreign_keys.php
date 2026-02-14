@@ -36,10 +36,6 @@ return new class extends Migration
             $table->foreign('reservation_id')->references('id')->on('reservations');
             $table->foreign('tax_id')->references('id')->on('taxes');
         });
-        Schema::connection('mysql2')->table('clients', function (Blueprint $table) {
-            $table->foreign('nationality_id')->references('id')->on('nationalities');
-            //$table->foreign('guest_classification_id')->references('id')->on('guest_classifications');
-        });
         Schema::table('guest_classifications', function (Blueprint $table) {
             $table->foreign('discount_id')->references('id')->on('discounts');
         });
@@ -90,10 +86,6 @@ return new class extends Migration
         Schema::table('reservation_taxes', function (Blueprint $table) {
             $table->dropForeign(['reservation_id']);
             $table->dropForeign(['tax_id']);
-        });
-        Schema::connection('mysql2')->table('clients', function (Blueprint $table) {
-            $table->dropForeign(['nationality_id']);
-            $table->dropForeign(['guest_classification_id']);
         });
         Schema::table('guest_classifications', function (Blueprint $table) {
             $table->dropForeign(['discount_id']);

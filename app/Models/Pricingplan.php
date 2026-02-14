@@ -9,5 +9,5 @@ class Pricingplan extends Model
 {
     use HasFactory;
     protected $table = 'pricing_plans';
-    protected $fillable = ['NameAr', 'NameEn', 'StartDate', 'EndDate'];
+    protected $fillable = ['NameAr', 'NameEn', 'StartDate', 'EndDate', 'ActiveType'];
 }

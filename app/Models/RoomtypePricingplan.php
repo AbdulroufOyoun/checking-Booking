@@ -15,4 +15,9 @@ class RoomtypePricingplan extends Model
     {
         return $this->belongsTo(Pricingplan::class, 'pricingplan_id');
     }
+
+    public function roomType()
+    {
+        return $this->belongsTo(RoomType::class, 'roomtype_id');
+    }
 }

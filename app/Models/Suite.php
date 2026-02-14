@@ -13,18 +13,23 @@ class Suite extends Model
 {
     use HasFactory;
 
+    protected $fillable = ['building_id', 'floor_id', 'number', 'suiteStatus', 'active'];
+
     public $timestamps = false;
 
-    function rooms():HasMany {
+    function rooms(): HasMany
+    {
         return $this->hasMany(Room::class);
     }
 
-    function floor():BelongsTo {
+    function floor(): BelongsTo
+    {
         return $this->belongsTo(Floor::class);
     }
 
 
-    function building():BelongsTo {
+    function building(): BelongsTo
+    {
         return $this->belongsTo(Building::class);
     }
 }
