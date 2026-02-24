@@ -13,6 +13,7 @@ use App\Models\Building;
 class Floor extends Model
 {
     use HasFactory;
+protected $fillable = ['building_id', 'name', 'lock_id','active','number'];
 
     public $timestamps = true;
 

@@ -3,25 +3,28 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Users;
 use App\Http\Controllers\Buildings;
+use App\Http\Controllers\BuildingsController;
 
 
 Route::post('login', [Users::class, 'login']);
 
+// Building
+Route::post('updateBuilding', [BuildingsController::class, 'update']);
+Route::delete('building', [BuildingsController::class, 'destroy']);
+
 // Route::group(['middleware' => 'auth:sanctum'], function () {
 //=========================================Buildings=============================================
-Route::post('addBuilding', [Buildings::class, 'addBuilding']);
 Route::post('addFloor', [Buildings::class, 'addFloor']);
 Route::post('addSuite', [Buildings::class, 'addSuite']);
 Route::post('addRoom', [Buildings::class, 'addRoom']);
 Route::post('deleteRoom', [Buildings::class, 'deleteRoom']);
 Route::post('deleteFloor', [Buildings::class, 'deleteFloor']);
-Route::post('deleteSuite', [Buildings::class, 'deleteSuite']);
-Route::post('deleteBuilding', [Buildings::class, 'deleteBuilding']);
 Route::post('updateRoom', [Buildings::class, 'updateRoom']);
 Route::post('updateSuite', [Buildings::class, 'updateSuite']);
 Route::post('updateFloor', [Buildings::class, 'updateFloor']);
-Route::post('updateBuilding', [Buildings::class, 'updateBuilding']);
-Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
+//Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
+Route::post('deleteSuite', [Buildings::class, 'deleteSuite']);
+
 Route::post('addMultiRoom', [Buildings::class, 'addMultiRoom']);
 //=====================================Discounts=================================================
 Route::post('addDiscount', [Users::class, 'addDiscount']);

@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\DB;
 class Buildings extends Controller
 {
     //=====================================ADD===============================================
+    //a
     public function addBuilding(Request $request)
     {
         $validation = Validator::make($request->all(), [
@@ -297,7 +298,6 @@ class Buildings extends Controller
             'id_building' => "required|numeric|exists:buildings,id",
             'id_suite' => "required|numeric|exists:suites,id",
             'delete_rooms' => "required|boolean" // 0 or 1
-
         ]);
         if ($validation->fails()) {
             return response(['result' => 'failed', 'code' => 0, 'error' => $validation->errors()], 200);

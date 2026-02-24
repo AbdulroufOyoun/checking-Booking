@@ -6,6 +6,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\College;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -14,7 +15,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call([
+            PermissionSeeder::class,
+        ]);
         // College::factory(15)->create();    //Done
-        User::factory(3)->create();    //Done
+        // User::factory(3)->create();    //Done
     }
 }

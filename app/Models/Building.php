@@ -9,8 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Building extends Model
 {
     use HasFactory;
-
-    public $timestamps = true;
+protected $fillable = ['number', 'name', 'lock_id'];
 
     function floors(): HasMany
     {
