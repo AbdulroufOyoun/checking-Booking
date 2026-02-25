@@ -1,40 +1,40 @@
 <?php
 
 if (!function_exists('Success')) {
-    function Success($message)
+    function Success($message,$status=200)
     {
         return response()->json([
             'success' => true,
             'message' => $message,
-            'code' => 200,
+            'code' => $status,
             'data' => null,
 
-        ], 200);
+        ], $status);
     }
 }
 
 if (!function_exists('SuccessData')) {
-    function SuccessData($message, $data)
+    function SuccessData($message, $data,$status= 200)
     {
 
         return response()->json([
             'success' => true,
             'message' => $message,
-            'code' => 200,
+            'code' => $status,
             'data' => $data,
-        ], 200);
+        ], $status);
     }
 }
 if (!function_exists('Failed')) {
-    function Failed($message ='An unexpected error occurred. Please try again later.')
+    function Failed($message ='An unexpected error occurred. Please try again later.',$status =500)
     {
         return response()->json([
             'success' => false,
             'message' => $message,
-            'code' => 500,
+            'code' => $status,
             'data' => null,
 
-        ], 500);
+        ], $status);
     }
 }
 

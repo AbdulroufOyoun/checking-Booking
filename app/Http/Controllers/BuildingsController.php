@@ -19,21 +19,18 @@ class BuildingsController extends Controller
    public function store(BuildingRequest $request)
 {
     DB::beginTransaction();
-
-    // try {
+    try {
         $data = $request->only(['number', 'name', 'lock_id']);
         $building = Building::create($data);
         $building['floors']=[];
-
         if ($request->numberOfFloor) {
             $floorsData = [];
             $now = now();
             $count = $request->numberOfFloor;
             $startNumber = $request->numberFloor ?? 1;
-
             for ($i = 0; $i < $count; $i++) {
                 $floorsData[] = [
-                    'building_id' => $building->id, // استخدم id المبنى الجديد
+                    'building_id' => $building->id,
                     'number'      => $startNumber + $i,
                 ];
             }
@@ -43,19 +40,14 @@ class BuildingsController extends Controller
         }
         DB::commit();
         return SuccessData('Building added Successfully', new BuildingResource($building));
-
-//     } catch (\Exception $e) {
-//         DB::rollBack();
-//         return $e->message()->first();
-// return  Failed('An unexpected error occurred. Please try again later.');
-
-
-//     }
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return  Failed('An unexpected error occurred. Please try again later.');
+    }
 }
 
 public  function update(BuildingUpdateRequest $request)
     {
-
         $building = Building::find($request->id);
         $building->name = $request->name;
         $building->number = $request->number;
@@ -64,7 +56,6 @@ public  function update(BuildingUpdateRequest $request)
             return Success('Record Update Successfully');
         } catch (Exception $e) {
             return  Failed('An unexpected error occurred. Please try again later.');
-
         }
     }
     public function destroy(BuildingIdRequest $request)
