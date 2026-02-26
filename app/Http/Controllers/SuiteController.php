@@ -22,10 +22,11 @@ class SuiteController extends Controller
             $perPage = \returnPerPage();
             $query = Suite::where('active', 1);
 
-            if ($request->floor_id) {
-                $query->where('floor_id', $request->floor_id);
-            }elseif($request->building_id) {
+            if($request->building_id) {
                 $query->where('building_id', $request->building_id);
+            }
+            if ($request->floor_id) {
+                $query=Suite::where('active', 1)->where('floor_id', $request->floor_id);
             }
 
 

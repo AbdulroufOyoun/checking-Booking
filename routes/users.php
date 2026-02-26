@@ -40,14 +40,14 @@ Route::post('updateRoom', [RoomController::class, 'updateRoom']);
 Route::post('addMultiRoom', [RoomController::class, 'addMultiRoom']);
 
 //=====================================RoomTypesController====================================================
-Route::post('/roomTypes/addRoomType', [RoomTypesController::class, 'addRoomType']);
-Route::get('/roomTypes/getRoomType', [RoomTypesController::class, 'getRoomType']);
-Route::post('/roomTypes/updateRoomType', [RoomTypesController::class, 'updateRoomType']);
-Route::post('/roomTypes/deleteRoomType', [RoomTypesController::class, 'deleteRoomType']);
-Route::get('/roomTypes/getRoomtypePricing', [RoomTypesController::class, 'getRoomtypePricing']);
-Route::post('/roomTypes/addRoomtypePricing', [RoomTypesController::class, 'addRoomtypePricing']);
-Route::post('/roomTypes/updateRoomtypePricing', [RoomTypesController::class, 'updateRoomtypePricing']);
-Route::post('/roomTypes/deleteRoomtypePricing', [RoomTypesController::class, 'deleteRoomtypePricing']);
+Route::post('/addRoomType', [RoomTypesController::class, 'addRoomType']);
+Route::get('/getRoomType', [RoomTypesController::class, 'getRoomType']);
+Route::post('/updateRoomType', [RoomTypesController::class, 'updateRoomType']);
+Route::post('/deleteRoomType', [RoomTypesController::class, 'deleteRoomType']);
+Route::get('/getRoomtypePricing', [RoomTypesController::class, 'getRoomtypePricing']);
+Route::post('/addRoomtypePricing', [RoomTypesController::class, 'addRoomtypePricing']);
+Route::post('/updateRoomtypePricing', [RoomTypesController::class, 'updateRoomtypePricing']);
+Route::post('/deleteRoomtypePricing', [RoomTypesController::class, 'deleteRoomtypePricing']);
 
 
 //=====================================Discounts=================================================
@@ -115,10 +115,10 @@ Route::get('/addPermissions', [Users::class, 'addPermissions']);
 //=====================================PermissionUser==============================================
 Route::get('/addUserPermission', [Users::class, 'addUserPermission']);
 //=====================================PricingPlan=================================================
-Route::get('/getRoomtypePricing', [Users::class, 'getRoomtypePricing']);
-Route::post('/addRoomtypePricing', [Users::class, 'addRoomtypePricing']);
-Route::post('/updateRoomtypePricing', [Users::class, 'updateRoomtypePricing']);
-Route::post('/deleteRoomtypePricing', [Users::class, 'deleteRoomtypePricing']);
+// Route::get('/getRoomtypePricing', [Users::class, 'getRoomtypePricing']);
+// Route::post('/addRoomtypePricing', [Users::class, 'addRoomtypePricing']);
+// Route::post('/updateRoomtypePricing', [Users::class, 'updateRoomtypePricing']);
+// Route::post('/deleteRoomtypePricing', [Users::class, 'deleteRoomtypePricing']);
 //=====================================PeakDaysCheck===============================================
 Route::post('/updatePeakDaysCheck', [Users::class, 'updatePeakDaysCheck']);
 Route::get('/seedWeekDays', [Users::class, 'seedWeekDays']);
@@ -126,9 +126,9 @@ Route::get('/seedWeekDays', [Users::class, 'seedWeekDays']);
 Route::post('/updatePeakMonthsCheck', [Users::class, 'updatePeakMonthsCheck']);
 Route::get('/seedMonths', [Users::class, 'seedMonths']);
 //=====================================RoomType====================================================
-Route::post('/addRoomType', [Users::class, 'addRoomType']);
-Route::post('/updateRoomType', [Users::class, 'updateRoomType']);
-Route::post('/deleteRoomType', [Users::class, 'deleteRoomType']);
+// Route::post('/addRoomType', [Users::class, 'addRoomType']);
+// Route::post('/updateRoomType', [Users::class, 'updateRoomType']);
+// Route::post('/deleteRoomType', [Users::class, 'deleteRoomType']);
 
 
 // });
