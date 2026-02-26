@@ -68,14 +68,7 @@ class RoomController extends Controller
     public function addMultiRoom(StoreMultiRoomRequest $request)
     {
         try {
-            // $existingRoom = Room::where('building_id', $request->buildingId)
-            //     ->where('number', '>=', $request->numberRoom)
-            //     ->where('number', '<', $request->numberRoom + $request->numberOfRoom)
-            //     ->exists();
 
-            // if ($existingRoom) {
-            //     return Failed('Room numbers already exist in this building');
-            // }
 $startNumber = (int)$request->numberRoom;
 $endNumber = $startNumber + (int)$request->numberOfRoom - 1;
 
@@ -105,7 +98,6 @@ return Success('Rooms created successfully.', $addedRooms);
         }
     }
 
-    //=====================================UPDATE ROOM===============================================
     public function updateRoom(UpdateRoomRequest $request)
     {
         $room = Room::find($request->id);
@@ -133,18 +125,15 @@ return Success('Rooms created successfully.', $addedRooms);
         }
     }
 
-    //=====================================DELETE ROOM===============================================
     public function deleteRoom(DestroyRoomRequest $request)
     {
         $room = Room::find($request->id);
 
-        // If has reservation for room just edit 'active'   1 active | 0 Inactive
         if ($room->isHasReservation()) {
             $room->active = 0;
             $room->save();
             return Success('Room deactivated due to existing reservations.');
         }
-        // Else not have reservation for room you can delete
         else {
             try {
                 $room->delete();
@@ -154,8 +143,6 @@ return Success('Rooms created successfully.', $addedRooms);
             }
         }
     }
-
-    //=====================================HELPER FUNCTIONS===============================================
     public function checkRoomInBuilding($building_id, $number)
     {
         $CheckRoom = Room::where('building_id', $building_id)->where('number', $number)->exists();

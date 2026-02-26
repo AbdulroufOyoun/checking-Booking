@@ -17,7 +17,6 @@ use Illuminate\Support\Facades\DB;
 
 class FloorController extends Controller
 {
-    //=====================================INDEX (Get All Floors by Building)===============================================
     public function index(FloorIndexRequest $request)
     {
         try {
@@ -31,7 +30,6 @@ class FloorController extends Controller
         }
     }
 
-    //=====================================ADD FLOOR===============================================
     public function addFloor(AddFloorRequest $request)
     {
         $building = Building::find($request->building_id);
@@ -51,7 +49,6 @@ class FloorController extends Controller
         }
     }
 
-    //=====================================DELETE FLOOR===============================================
     public function deleteFloor(DeleteFloorRequest $request)
     {
         $floor = Floor::with(['rooms', 'suites.rooms'])->where('id', $request->id_floor)->first();
@@ -123,7 +120,6 @@ class FloorController extends Controller
         }
     }
 
-    //=====================================UPDATE FLOOR===============================================
     public function updateFloor(UpdateFloorRequest $request)
     {
         $floor = Floor::find($request->id);

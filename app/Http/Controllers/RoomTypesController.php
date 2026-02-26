@@ -17,7 +17,6 @@ use Exception;
 
 class RoomTypesController extends Controller
 {
-    //=====================================RoomType==================================================================
 
     public function addRoomType(AddRoomTypeRequest $request)
     {
@@ -91,7 +90,6 @@ class RoomTypesController extends Controller
         }
     }
 
-    //=====================================PricingPlan===============================================================
 
     public function getRoomtypePricing()
     {
