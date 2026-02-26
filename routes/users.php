@@ -4,28 +4,52 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Users;
 use App\Http\Controllers\Buildings;
 use App\Http\Controllers\BuildingsController;
+use App\Http\Controllers\FloorController;
+use App\Http\Controllers\SuiteController;
+use App\Http\Controllers\RoomController;
+use App\Http\Controllers\RoomTypesController;
 
 
 Route::post('login', [Users::class, 'login']);
 
 // Building
+// Route::group(['middleware' => 'auth:sanctum'], function () {
+//=========================================Buildings=============================================
+//Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
+Route::get('buildings', [BuildingsController::class, 'index']);
 Route::post('updateBuilding', [BuildingsController::class, 'update']);
 Route::delete('building', [BuildingsController::class, 'destroy']);
 
-// Route::group(['middleware' => 'auth:sanctum'], function () {
-//=========================================Buildings=============================================
-Route::post('addFloor', [Buildings::class, 'addFloor']);
-Route::post('addSuite', [Buildings::class, 'addSuite']);
-Route::post('addRoom', [Buildings::class, 'addRoom']);
-Route::post('deleteRoom', [Buildings::class, 'deleteRoom']);
-Route::post('deleteFloor', [Buildings::class, 'deleteFloor']);
-Route::post('updateRoom', [Buildings::class, 'updateRoom']);
-Route::post('updateSuite', [Buildings::class, 'updateSuite']);
-Route::post('updateFloor', [Buildings::class, 'updateFloor']);
-//Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
-Route::post('deleteSuite', [Buildings::class, 'deleteSuite']);
+//=========================================Floor=============================================
+Route::get('floors', [FloorController::class, 'index']);
+Route::post('addFloor', [FloorController::class, 'addFloor']);
+Route::delete('deleteFloor', [FloorController::class, 'deleteFloor']);
+Route::post('updateFloor', [FloorController::class, 'updateFloor']);
 
-Route::post('addMultiRoom', [Buildings::class, 'addMultiRoom']);
+//=========================================Suite=============================================
+Route::get('suites', [SuiteController::class, 'index']);
+Route::post('addSuite', [SuiteController::class, 'addSuite']);
+Route::delete('deleteSuite', [SuiteController::class, 'deleteSuite']);
+Route::post('updateSuite', [SuiteController::class, 'updateSuite']);
+
+//=========================================Room=============================================
+Route::get('rooms', [RoomController::class, 'index']);
+Route::post('addRoom', [RoomController::class, 'addRoom']);
+Route::delete('deleteRoom', [RoomController::class, 'deleteRoom']);
+Route::post('updateRoom', [RoomController::class, 'updateRoom']);
+Route::post('addMultiRoom', [RoomController::class, 'addMultiRoom']);
+
+//=====================================RoomTypesController====================================================
+Route::post('/roomTypes/addRoomType', [RoomTypesController::class, 'addRoomType']);
+Route::get('/roomTypes/getRoomType', [RoomTypesController::class, 'getRoomType']);
+Route::post('/roomTypes/updateRoomType', [RoomTypesController::class, 'updateRoomType']);
+Route::post('/roomTypes/deleteRoomType', [RoomTypesController::class, 'deleteRoomType']);
+Route::get('/roomTypes/getRoomtypePricing', [RoomTypesController::class, 'getRoomtypePricing']);
+Route::post('/roomTypes/addRoomtypePricing', [RoomTypesController::class, 'addRoomtypePricing']);
+Route::post('/roomTypes/updateRoomtypePricing', [RoomTypesController::class, 'updateRoomtypePricing']);
+Route::post('/roomTypes/deleteRoomtypePricing', [RoomTypesController::class, 'deleteRoomtypePricing']);
+
+
 //=====================================Discounts=================================================
 Route::post('addDiscount', [Users::class, 'addDiscount']);
 Route::post('updateDiscount', [Users::class, 'updateDiscount']);

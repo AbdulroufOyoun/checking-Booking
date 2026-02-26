@@ -16,6 +16,17 @@ use App\Models\Reservation;
 
 class BuildingsController extends Controller
 {
+   public function index(Request $request)
+   {
+       try {
+           $perPage = \returnPerPage();
+           $buildings = Building::where('active',1)->paginate($perPage);
+           return \Pagination($buildings);
+       } catch (\Exception $e) {
+           return Failed($e->getMessage());
+       }
+   }
+
    public function store(BuildingRequest $request)
 {
     DB::beginTransaction();

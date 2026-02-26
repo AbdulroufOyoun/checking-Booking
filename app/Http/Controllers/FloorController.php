@@ -5,26 +5,37 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Floor\AddFloorRequest;
 use App\Http\Requests\Floor\DeleteFloorRequest;
 use App\Http\Requests\Floor\UpdateFloorRequest;
+use App\Http\Requests\Floor\FloorIndexRequest;
 use App\Models\Building;
 use App\Models\Floor;
 use App\Models\Room;
 use App\Models\Suite;
 use App\Messages;
 use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class FloorController extends Controller
 {
+    //=====================================INDEX (Get All Floors by Building)===============================================
+    public function index(FloorIndexRequest $request)
+    {
+        try {
+            $perPage = \returnPerPage();
+            $floors = Floor::where('building_id', $request->building_id)
+                          ->where('active', 1)
+                          ->paginate($perPage);
+            return \Pagination($floors);
+        } catch (\Exception $e) {
+            return Failed($e->getMessage());
+        }
+    }
+
     //=====================================ADD FLOOR===============================================
     public function addFloor(AddFloorRequest $request)
     {
         $building = Building::find($request->building_id);
         $building->floors();
-        // foreach ($building->floors as $floor) {
-        //     if ($floor->number == $request->number) {
-        //         return Failed(Messages::getMessage('floorNumberExistsInBuilding'));
-        //     }
-        // }
 
         $floor = new Floor();
         $floor->building_id = $building->id;
@@ -40,24 +51,7 @@ class FloorController extends Controller
         }
     }
 
-    // public function addMultiFloor($building_id, $number, $numberOfFloor)
-    // {
-    //     $building = Building::find($building_id);
-    //     $existingFloor = $building->floors()->where('building_id', '=', $building_id)->where('number', '>=', $number)->where('number', '<', $number + $numberOfFloor)->exists();
-    //     if ($existingFloor) {
-    //         return [];
-    //     }
-    //     $floors = [];
-    //     for ($i = 0; $i < $numberOfFloor; $i++) {
-    //         $newFloor = new Floor();
-    //         $newFloor->building_id = $building_id;
-    //         $newFloor->number = $number + $i;
-    //         $newFloor->save();
-    //         $floors[] = $newFloor;
-    //     }
-    //     return $floors;
-    // }
-
+    //=====================================DELETE FLOOR===============================================
     public function deleteFloor(DeleteFloorRequest $request)
     {
         $floor = Floor::with(['rooms', 'suites.rooms'])->where('id', $request->id_floor)->first();
@@ -141,13 +135,4 @@ class FloorController extends Controller
             return Failed($e->getMessage());
         }
     }
-
-    //=====================================HELPER FUNCTIONS===============================================
-    // public function checkFloorInBuilding($building_id, $number)
-    // {
-    //     $floors = Floor::where('building_id', $building_id)->where('number', $number)->exists();
-    //     if ($floors) {
-    //         return true;
-    //     }
-    // }
 }
