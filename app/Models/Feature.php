@@ -10,9 +10,16 @@ class Feature extends Model
 {
     use HasFactory;
 
-    function room_features() :HasMany
+    public $timestamps = false;
+
+    protected $fillable = [
+        'name_ar',
+        'name_en',
+        'description',
+    ];
+
+    public function room_features(): HasMany
     {
         return $this->hasMany(Room_feature::class);
     }
-    
 }

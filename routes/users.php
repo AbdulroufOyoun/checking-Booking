@@ -8,6 +8,9 @@ use App\Http\Controllers\FloorController;
 use App\Http\Controllers\SuiteController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomTypesController;
+use App\Http\Controllers\FacilitiesController;
+use App\Http\Controllers\FeaturesController;
+use App\Http\Controllers\StayReasonsController;
 
 
 Route::post('login', [Users::class, 'login']);
@@ -49,6 +52,32 @@ Route::post('/addRoomtypePricing', [RoomTypesController::class, 'addRoomtypePric
 Route::post('/updateRoomtypePricing', [RoomTypesController::class, 'updateRoomtypePricing']);
 Route::post('/deleteRoomtypePricing', [RoomTypesController::class, 'deleteRoomtypePricing']);
 
+//=====================================Facilities=================================================
+Route::get('/getFacilities', [FacilitiesController::class, 'index']);
+Route::post('/addFacilities', [FacilitiesController::class, 'store']);
+Route::post('/updateFacilities', [FacilitiesController::class, 'update']);
+Route::post('/deleteFacilities', [FacilitiesController::class, 'destroy']);
+Route::get('/getFacilitiesByBuilding', [FacilitiesController::class, 'getByBuilding']);
+Route::get('/getFacilitiesByFloor', [FacilitiesController::class, 'getByFloor']);
+
+//=====================================FacilitiesType==============================================
+Route::get('/getFacilitiesType', [FacilitiesController::class, 'typeIndex']);
+Route::post('/addFacilitiesType', [FacilitiesController::class, 'typeStore']);
+Route::post('/updateFacilitiesType', [FacilitiesController::class, 'typeUpdate']);
+Route::delete('/deleteFacilitiesType', [FacilitiesController::class, 'typeDestroy']);
+Route::get('/getFacilitiesTypeById', [FacilitiesController::class, 'typeShow']);
+
+//=====================================Features=================================================
+Route::get('/getFeature', [FeaturesController::class, 'index']);
+Route::post('/addFeature', [FeaturesController::class, 'store']);
+Route::post('/updateFeature', [FeaturesController::class, 'update']);
+Route::delete('/deleteFeature', [FeaturesController::class, 'destroy']);
+//=====================================RoomFeature================================================
+Route::get('/getRoomFeature', [FeaturesController::class, 'roomIndex']);
+Route::post('/addRoomFeature', [FeaturesController::class, 'roomStore']);
+Route::post('/updateRoomFeature', [FeaturesController::class, 'roomUpdate']);
+Route::delete('/deleteRoomFeature', [FeaturesController::class, 'roomDestroy']);
+Route::get('/getRoomFeatureByRoom', [FeaturesController::class, 'getByRoom']);
 
 //=====================================Discounts=================================================
 Route::post('addDiscount', [Users::class, 'addDiscount']);
@@ -65,18 +94,10 @@ Route::post('updateGuestFeature', [Users::class, 'updateGuestFeature']);
 Route::post('deleteGuestFeature', [Users::class, 'deleteGuestFeature']);
 Route::get('getGuestFeature', [Users::class, 'getGuestFeature']);
 //=====================================StayReason================================================
-Route::post('/addStayReason', [Users::class, 'addStayReason']);
-Route::post('/updateStayReason', [Users::class, 'updateStayReason']);
-Route::post('/deleteStayReason', [Users::class, 'deleteStayReason']);
-Route::get('/getStayReasons', [Users::class, 'getStayReasons']);
-//=====================================Features===================================================
-Route::post('/addFeature', [Users::class, 'addFeature']);
-Route::post('/deleteFeature', [Users::class, 'deleteFeature']);
-Route::get('/getFeature', [Users::class, 'getFeature']);
-//=====================================RoomFeature================================================
-Route::post('/addRoomFeature', [Users::class, 'addRoomFeature']);
-Route::post('/deleteRoomFeature', [Users::class, 'deleteRoomFeature']);
-Route::get('/getRoomFeature', [Users::class, 'getRoomFeature']);
+Route::get('/getStayReasons', [StayReasonsController::class, 'index']);
+Route::post('/addStayReason', [StayReasonsController::class, 'store']);
+Route::post('/updateStayReason', [StayReasonsController::class, 'update']);
+Route::post('/deleteStayReason', [StayReasonsController::class, 'destroy']);
 //=====================================Penaltie===================================================
 Route::post('/addPenaltie', [Users::class, 'addPenaltie']);
 Route::post('/deletePenaltie', [Users::class, 'deletePenaltie']);
@@ -114,21 +135,9 @@ Route::get('/getInfoUsers', [Users::class, 'getInfoUsers']);
 Route::get('/addPermissions', [Users::class, 'addPermissions']);
 //=====================================PermissionUser==============================================
 Route::get('/addUserPermission', [Users::class, 'addUserPermission']);
-//=====================================PricingPlan=================================================
-// Route::get('/getRoomtypePricing', [Users::class, 'getRoomtypePricing']);
-// Route::post('/addRoomtypePricing', [Users::class, 'addRoomtypePricing']);
-// Route::post('/updateRoomtypePricing', [Users::class, 'updateRoomtypePricing']);
-// Route::post('/deleteRoomtypePricing', [Users::class, 'deleteRoomtypePricing']);
 //=====================================PeakDaysCheck===============================================
 Route::post('/updatePeakDaysCheck', [Users::class, 'updatePeakDaysCheck']);
 Route::get('/seedWeekDays', [Users::class, 'seedWeekDays']);
 //=====================================PeakMonthsCheck===============================================
 Route::post('/updatePeakMonthsCheck', [Users::class, 'updatePeakMonthsCheck']);
 Route::get('/seedMonths', [Users::class, 'seedMonths']);
-//=====================================RoomType====================================================
-// Route::post('/addRoomType', [Users::class, 'addRoomType']);
-// Route::post('/updateRoomType', [Users::class, 'updateRoomType']);
-// Route::post('/deleteRoomType', [Users::class, 'deleteRoomType']);
-
-
-// });

@@ -14,8 +14,13 @@ class Room_feature extends Model
     protected $fillable = ['room_id', 'feature_id', 'number'];
     public $timestamps = false;
 
-    function room(): BelongsTo
+function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
+    }
+
+    function feature(): BelongsTo
+    {
+        return $this->belongsTo(Feature::class);
     }
 }

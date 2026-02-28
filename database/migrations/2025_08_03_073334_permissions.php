@@ -19,6 +19,8 @@ return new class extends Migration
             $table->string('description_ar')->nullable()->comment("Description of the permission AR");
             $table->boolean('active')->default(true)->comment("0 => InActive 1 => Active");
             $table->comment("Table to store permissions for users and roles");
+            $table->timestamps();
+
         });
     }
 

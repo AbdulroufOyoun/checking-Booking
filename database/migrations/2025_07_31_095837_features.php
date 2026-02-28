@@ -17,6 +17,8 @@ return new class extends Migration
             $table->string('name_ar')->comment('the feature name_ar');
             $table->string('name_en')->comment('the feature name_en');
             $table->text('description')->nullable()->comment('the feature description');
+            $table->timestamps();
+
         });
     }
 

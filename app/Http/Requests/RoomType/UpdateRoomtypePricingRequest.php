@@ -8,19 +8,11 @@ use Illuminate\Contracts\Validation\Validator;
 
 class UpdateRoomtypePricingRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
@@ -41,9 +33,11 @@ class UpdateRoomtypePricingRequest extends FormRequest
     protected function failedValidation(Validator $validator)
     {
         $response = response()->json([
-            'result' => 'failed',
-            'error' => $validator->errors()->first(),
-        ], 200);
+            'success' => false,
+            'message' => $validator->errors()->first(),
+            'code' => 422,
+            'data' => null
+        ], 422);
         throw new HttpResponseException($response);
     }
 }

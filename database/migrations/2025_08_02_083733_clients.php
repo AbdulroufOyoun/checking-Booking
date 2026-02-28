@@ -7,11 +7,16 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
+     * تحديد الاتصال الذي سيتم استخدامه لهذا الـ Migration.
+     */
+    protected $connection = 'mysql2';
+
+    /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::create('clients', function (Blueprint $table) {
+        Schema::connection($this->connection)->create('clients', function (Blueprint $table) {
             $table->id();
             $table->string('first_name')->comment('First name of the client');
             $table->string('last_name')->comment('Last name of the client');
@@ -33,6 +38,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('mysql2')->dropIfExists('clients');
+        Schema::connection($this->connection)->dropIfExists('clients');
     }
 };

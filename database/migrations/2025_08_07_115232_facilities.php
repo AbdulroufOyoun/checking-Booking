@@ -22,6 +22,8 @@ return new class extends Migration
             $table->unsignedBigInteger('facilities_types_id');
             $table->foreign('facilities_types_id')->references('id')->on('facilities_type');
             $table->string('lock_data')->nullable()->unique();
+            $table->timestamps();
+
         });
     }
 

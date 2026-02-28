@@ -16,6 +16,8 @@ return new class extends Migration
             $table->unsignedBigInteger('classifications_id');
             $table->foreign('classifications_id')->references('id')->on('guest_classifications');
             $table->unsignedBigInteger('client_id');
+            $table->timestamps();
+
         });
     }
 
