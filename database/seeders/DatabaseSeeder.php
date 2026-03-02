@@ -17,8 +17,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             PermissionSeeder::class,
+            PeakDayAndMonthSeeder::class,
         ]);
-        // College::factory(15)->create();    //Done
-        // User::factory(3)->create();    //Done
     }
 }
