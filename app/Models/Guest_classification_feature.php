@@ -10,6 +10,8 @@ class Guest_classification_feature extends Model
 {
     use HasFactory;
     protected $table = 'guest_classification_features';
+    protected $fillable = ['guest_classification_id', 'guest_feature_id'];
+    public $timestamps = false;
 
     function guest_classification(): BelongsTo
     {

@@ -11,10 +11,26 @@ use App\Http\Controllers\RoomTypesController;
 use App\Http\Controllers\FacilitiesController;
 use App\Http\Controllers\FeaturesController;
 use App\Http\Controllers\StayReasonsController;
+use App\Http\Controllers\PermissionsController;
+use App\Http\Controllers\DiscountsController;
+use App\Http\Controllers\TaxesController;
+use App\Http\Controllers\JobTitlesController;
+use App\Http\Controllers\PeakDaysController;
+use App\Http\Controllers\PeakMonthsController;
+use App\Http\Controllers\DepartmentsController;
+use App\Http\Controllers\PenaltiesController;
+use App\Http\Controllers\ReservationSourcesController;
+use App\Http\Controllers\ClientsController;
+use App\Http\Controllers\GuestClassificationsController;
+use App\Http\Controllers\GuestFeaturesController;
+use App\Http\Controllers\GuestClassificationFeaturesController;
+use App\Http\Controllers\ClientClassificationsController;
+use App\Http\Controllers\UsersController;
 
 
-Route::post('login', [Users::class, 'login']);
-
+Route::post('login', [UsersController::class, 'login']);
+// Route::middleware(['can_do:manage_settings'])->group(function () {
+// });
 // Building
 // Route::group(['middleware' => 'auth:sanctum'], function () {
 //=========================================Buildings=============================================
@@ -78,66 +94,93 @@ Route::post('/addRoomFeature', [FeaturesController::class, 'roomStore']);
 Route::post('/updateRoomFeature', [FeaturesController::class, 'roomUpdate']);
 Route::delete('/deleteRoomFeature', [FeaturesController::class, 'roomDestroy']);
 Route::get('/getRoomFeatureByRoom', [FeaturesController::class, 'getByRoom']);
-
-//=====================================Discounts=================================================
-Route::post('addDiscount', [Users::class, 'addDiscount']);
-Route::post('updateDiscount', [Users::class, 'updateDiscount']);
-Route::post('deleteDiscount', [Users::class, 'deleteDiscount']);
-Route::get('getDiscounts', [Users::class, 'getDiscounts']);
-//=====================================GuestClassification=======================================
-Route::post('addGuestClassification', [Users::class, 'addGuestClassification']);
-Route::post('updateGuestClassification', [Users::class, 'updateGuestClassification']);
-Route::post('deleteGuestClassification', [Users::class, 'deleteGuestClassification']);
-//=====================================GuestFeature==============================================
-Route::post('addGuestFeature', [Users::class, 'addGuestFeature']);
-Route::post('updateGuestFeature', [Users::class, 'updateGuestFeature']);
-Route::post('deleteGuestFeature', [Users::class, 'deleteGuestFeature']);
-Route::get('getGuestFeature', [Users::class, 'getGuestFeature']);
+//******//
 //=====================================StayReason================================================
 Route::get('/getStayReasons', [StayReasonsController::class, 'index']);
 Route::post('/addStayReason', [StayReasonsController::class, 'store']);
 Route::post('/updateStayReason', [StayReasonsController::class, 'update']);
-Route::post('/deleteStayReason', [StayReasonsController::class, 'destroy']);
-//=====================================Penaltie===================================================
-Route::post('/addPenaltie', [Users::class, 'addPenaltie']);
-Route::post('/deletePenaltie', [Users::class, 'deletePenaltie']);
-Route::get('/getPenalties', [Users::class, 'getPenalties']);
-//=====================================ReservationPenalties=======================================
-Route::post('/addReservationPenalty', [Users::class, 'addReservationPenalty']);
-Route::get('/getPenaltiesByReservationId', [Users::class, 'getPenaltiesByReservationId']);
-//=====================================Tax========================================================
-Route::post('/addTax', [Users::class, 'addTax']);
-Route::get('/getTax', [Users::class, 'getTax']);
-Route::post('/deleteTax', [Users::class, 'deleteTax']);
-//=====================================ReservationSources=========================================
-Route::post('/addReservationSource', [Users::class, 'addReservationSource']);
-Route::post('/updateReservationSource', [Users::class, 'updateReservationSource']);
-Route::post('/deleteReservationSource', [Users::class, 'deleteReservationSource']);
-Route::get('/getReservationSource', [Users::class, 'getReservationSource']);
-//=====================================Clients====================================================
-Route::post('/addClient', [Users::class, 'addClient']);
-Route::post('/getClientBy', [Users::class, 'getClientBy']);
-//=====================================Department=================================================
-Route::post('/addDepartment', [Users::class, 'addDepartment']);
-Route::get('/getDepartment', [Users::class, 'getDepartment']);
-Route::post('/getDepartmentById', [Users::class, 'getDepartmentById']);
-Route::post('/deleteDepartment', [Users::class, 'deleteDepartment']);
-//=====================================JobTitle===================================================
-Route::post('/addJobTitle', [Users::class, 'addJobTitle']);
-Route::get('/getJobTitle', [Users::class, 'getJobTitle']);
-Route::post('/getJobTitlesByDepartment', [Users::class, 'getJobTitlesByDepartment']);
-//=====================================Users======================================================
-Route::post('/addUser', [Users::class, 'addUser']);
-Route::post('/updateUser', [Users::class, 'updateUser']);
-Route::post('/inActiveUser', [Users::class, 'inActiveUser']);
-Route::get('/getInfoUsers', [Users::class, 'getInfoUsers']);
+Route::delete('/deleteStayReason', [StayReasonsController::class, 'destroy']);
+
 //=====================================Permissions=================================================
-Route::get('/addPermissions', [Users::class, 'addPermissions']);
-//=====================================PermissionUser==============================================
-Route::get('/addUserPermission', [Users::class, 'addUserPermission']);
+Route::get('/getPermissions', [PermissionsController::class, 'index']);
+Route::post('/updatePermission', [PermissionsController::class, 'update']);
+Route::delete('/deletePermission', [PermissionsController::class, 'destroy']);
+
+Route::post('/addUserPermission', [PermissionsController::class, 'addUserPermission']);
+
+//=====================================Discounts=================================================
+Route::get('getDiscounts', [DiscountsController::class, 'index']);
+Route::post('addDiscount', [DiscountsController::class, 'store']);
+Route::post('updateDiscount', [DiscountsController::class, 'update']);
+Route::delete('deleteDiscount', [DiscountsController::class, 'destroy']);
+
+//=====================================JobTitle===================================================
+Route::get('/getJobTitle', [JobTitlesController::class, 'index']);
+Route::get('/getJobTitlesByDepartment', [JobTitlesController::class, 'getByDepartment']);
+Route::post('/addJobTitle', [JobTitlesController::class, 'store']);
+Route::post('/updateJobTitle', [JobTitlesController::class, 'update']);
+Route::delete('/deleteJobTitle', [JobTitlesController::class, 'destroy']);
+
+//=====================================Tax========================================================
+Route::get('/getTax', [TaxesController::class, 'index']);
+Route::post('/addTax', [TaxesController::class, 'store']);
+Route::post('/updateTax', [TaxesController::class, 'update']);
+Route::delete('/deleteTax', [TaxesController::class, 'destroy']);
+
 //=====================================PeakDaysCheck===============================================
-Route::post('/updatePeakDaysCheck', [Users::class, 'updatePeakDaysCheck']);
-Route::get('/seedWeekDays', [Users::class, 'seedWeekDays']);
+Route::get('/getPeakDays', [PeakDaysController::class, 'index']);
+Route::post('/updatePeakDaysCheck', [PeakDaysController::class, 'updateCheck']);
 //=====================================PeakMonthsCheck===============================================
-Route::post('/updatePeakMonthsCheck', [Users::class, 'updatePeakMonthsCheck']);
-Route::get('/seedMonths', [Users::class, 'seedMonths']);
+Route::get('/getPeakMonths', [PeakMonthsController::class, 'index']);
+Route::post('/updatePeakMonthsCheck', [PeakMonthsController::class, 'updateCheck']);
+
+//=====================================Penaltie===================================================
+Route::get('/getPenalties', [PenaltiesController::class, 'index']);
+Route::post('/addPenaltie', [PenaltiesController::class, 'store']);
+Route::delete('/deletePenaltie', [PenaltiesController::class, 'destroy']);
+//=====================================ReservationPenalties=======================================
+Route::post('/addReservationPenalty', [PenaltiesController::class, 'addReservationPenalty']);
+Route::get('/getPenaltiesByReservationId', [PenaltiesController::class, 'getByReservation']);
+//=====================================ReservationSources=========================================
+Route::get('/getReservationSource', [ReservationSourcesController::class, 'index']);
+Route::post('/addReservationSource', [ReservationSourcesController::class, 'store']);
+Route::post('/updateReservationSource', [ReservationSourcesController::class, 'update']);
+Route::delete('/deleteReservationSource', [ReservationSourcesController::class, 'destroy']);
+//=====================================Clients====================================================
+Route::post('/addClient', [ClientsController::class, 'store']);
+Route::post('/getClientBy', [ClientsController::class, 'getBy']);
+//=====================================Department=================================================
+Route::get('/getDepartment', [DepartmentsController::class, 'index']);
+Route::post('/addDepartment', [DepartmentsController::class, 'store']);
+Route::get('/getDepartmentById', [DepartmentsController::class, 'show']);
+Route::post('/updateDepartment', [DepartmentsController::class, 'update']);
+Route::delete('/deleteDepartment', [DepartmentsController::class, 'destroy']);
+//=====================================Users======================================================
+Route::post('/addUser', [UsersController::class, 'store']);
+Route::post('/updateUser', [UsersController::class, 'update']);
+Route::post('/inActiveUser', [UsersController::class, 'inActive']);
+Route::get('/getInfoUsers', [UsersController::class, 'index']);
+//=====================================GuestClassification=======================================
+Route::get('/getGuestClassification', [GuestClassificationsController::class, 'index']);
+Route::post('addGuestClassification', [GuestClassificationsController::class, 'store']);
+Route::post('updateGuestClassification', [GuestClassificationsController::class, 'update']);
+Route::delete('deleteGuestClassification', [GuestClassificationsController::class, 'destroy']);
+//=====================================GuestFeature==============================================
+Route::get('getGuestFeature', [GuestFeaturesController::class, 'index']);
+Route::post('addGuestFeature', [GuestFeaturesController::class, 'store']);
+Route::post('updateGuestFeature', [GuestFeaturesController::class, 'update']);
+Route::delete('deleteGuestFeature', [GuestFeaturesController::class, 'destroy']);
+
+//=====================================GuestClassificationFeature==================================
+Route::get('getGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'index']);
+Route::get('getGuestClassificationFeatureByClassification', [GuestClassificationFeaturesController::class, 'getFeaturesByClassification']);
+Route::post('addGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'store']);
+Route::delete('deleteGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'destroy']);
+
+//=====================================ClientClassification (Cross-Database)=======================
+// ربط العميل بالتصنيف - يعمل بين قاعدتي البيانات (mysql2 و mysql)
+Route::post('assignClientClassification', [ClientClassificationsController::class, 'assignClassification']);
+Route::post('getClientClassification', [ClientClassificationsController::class, 'getClientClassification']);
+Route::delete('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);
+Route::get('getAllClientsWithClassification', [ClientClassificationsController::class, 'getAllClientsWithClassification']);
+Route::post('searchClientWithClassification', [ClientClassificationsController::class, 'searchClientWithClassification']);

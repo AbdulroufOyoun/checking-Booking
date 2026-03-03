@@ -30,4 +30,8 @@ class Guest_classification extends Model
     {
         return $this->belongsTo(Discount::class, 'discount_id');
     }
+    public function guest_features()
+{
+    return $this->belongsToMany(Guest_feature::class, 'guest_classification_features');
+}
 }

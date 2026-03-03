@@ -18,4 +18,18 @@ class Guest_feature extends Model
     {
         return $this->hasMany(Guest_classification_feature::class, 'guest_feature_id');
     }
+
+    function guest_classifications()
+    {
+        return $this->belongsToMany(
+            Guest_classification::class,
+            'guest_classification_features',
+            'guest_feature_id',
+            'guest_classification_id'
+        );
+    }
+        public function guest_feature()
+{
+    return $this->belongsToMany(Guest_feature::class, 'guest_classification_features');
+}
 }
