@@ -7,12 +7,8 @@ use App\Http\Requests\Room\UpdateRoomRequest;
 use App\Http\Requests\Room\DestroyRoomRequest;
 use App\Http\Requests\Room\StoreMultiRoomRequest;
 use App\Http\Requests\Room\RoomIndexRequest;
-use App\Models\Building;
-use App\Models\Floor;
+
 use App\Models\Room;
-use Exception;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class RoomController extends Controller
 {
@@ -60,7 +56,7 @@ class RoomController extends Controller
         try {
             $room->save();
             return SuccessData('Room added Successfully', $room);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return Failed($e->getMessage());
         }
     }
@@ -93,7 +89,7 @@ $addedRooms = Room::where('building_id', $request->buildingId)
     ->whereBetween('number', [$startNumber, $endNumber])
     ->get(['id', 'number']);
 return Success('Rooms created successfully.', $addedRooms);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return Failed($e->getMessage());
         }
     }
@@ -120,7 +116,7 @@ return Success('Rooms created successfully.', $addedRooms);
         try {
             $room->update();
             return Success('Room updated Successfully');
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return Failed($e->getMessage());
         }
     }
@@ -138,7 +134,7 @@ return Success('Rooms created successfully.', $addedRooms);
             try {
                 $room->delete();
                 return Success('Room deleted successfully.');
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 return Failed($e->getMessage());
             }
         }

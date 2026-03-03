@@ -148,7 +148,7 @@ Route::post('/updateReservationSource', [ReservationSourcesController::class, 'u
 Route::delete('/deleteReservationSource', [ReservationSourcesController::class, 'destroy']);
 //=====================================Clients====================================================
 Route::post('/addClient', [ClientsController::class, 'store']);
-Route::post('/getClientBy', [ClientsController::class, 'getBy']);
+Route::get('/getClientBy', [ClientsController::class, 'getBy']);
 //=====================================Department=================================================
 Route::get('/getDepartment', [DepartmentsController::class, 'index']);
 Route::post('/addDepartment', [DepartmentsController::class, 'store']);

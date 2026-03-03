@@ -16,7 +16,7 @@ use App\Models\Reservation;
 
 class BuildingsController extends Controller
 {
-   public function index(Request $request)
+   public function index()
    {
        try {
            $perPage = \returnPerPage();
@@ -36,7 +36,6 @@ class BuildingsController extends Controller
         $building['floors']=[];
         if ($request->numberOfFloor) {
             $floorsData = [];
-            $now = now();
             $count = $request->numberOfFloor;
             $startNumber = $request->numberFloor ?? 1;
             for ($i = 0; $i < $count; $i++) {
@@ -65,7 +64,7 @@ public  function update(BuildingUpdateRequest $request)
         try {
             $building->update();
             return Success('Record Update Successfully');
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return  Failed('An unexpected error occurred. Please try again later.');
         }
     }

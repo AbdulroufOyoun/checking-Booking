@@ -9,11 +9,8 @@ use App\Http\Requests\Floor\FloorIndexRequest;
 use App\Models\Building;
 use App\Models\Floor;
 use App\Models\Room;
-use App\Models\Suite;
-use App\Messages;
-use Exception;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Exception;
 
 class FloorController extends Controller
 {
@@ -81,35 +78,22 @@ class FloorController extends Controller
                 $floor->active = 0;
                 $floor->save();
 
-                foreach ($floor->rooms as $room) {
-                    $room->active = 0;
-                    $room->save();
-                }
+               $floor->rooms()->update(['active' => 0]);
 
-                foreach ($floor->suites as $suite) {
-                    $suite->active = 0;
-                    $suite->save();
+                $floor->suites()->update(['active' => 0]);
+                $suiteIds = $floor->suites()->pluck('id');
+    Room::whereIn('suite_id', $suiteIds)->update(['active' => 0]);
 
-                    foreach ($suite->rooms as $room) {
-                        $room->active = 0;
-                        $room->save();
-                    }
-                }
+    DB::commit();
+    return Success('Floor deactivated due to existing reservations.');
 
-                DB::commit();
-                return Success('Floor deactivated due to existing reservations.');
             } else {
                 //not have reservation
-                foreach ($floor->rooms as $room) {
-                    $room->delete();
-                }
+                $suiteIds = $floor->suites()->pluck('id');
+    Room::whereIn('suite_id', $suiteIds)->delete();
 
-                foreach ($floor->suites as $suite) {
-                    foreach ($suite->rooms as $room) {
-                        $room->delete();
-                    }
-                    $suite->delete();
-                }
+                $floor->suites()->delete();
+                $floor->rooms()->delete();
                 $floor->delete();
                 DB::commit();
                 return Success('Floor deleted successfully.');

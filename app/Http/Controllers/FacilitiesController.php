@@ -6,9 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Facilitie;
 use App\Models\FacilitiesType;
-use App\Models\Building;
-use App\Models\Floor;
-use App\Models\Suite;
 use App\Http\Requests\Facilities\AddFacilitiesRequest;
 use App\Http\Requests\Facilities\UpdateFacilitiesRequest;
 use App\Http\Requests\Facilities\DeleteFacilitiesRequest;
@@ -17,15 +14,9 @@ use App\Http\Requests\Facilities\UpdateFacilitiesTypeRequest;
 use App\Http\Requests\Facilities\DeleteFacilitiesTypeRequest;
 use App\Http\Requests\Facilities\GetFacilitiesByBuildingRequest;
 use App\Http\Requests\Facilities\GetFacilitiesByFloorRequest;
-use Exception;
 
 class FacilitiesController extends Controller
 {
-    //=====================================Facilities (Facilitie)===============================================
-
-    /**
-     * Get all facilities with pagination
-     */
     public function index(Request $request)
     {
         try {
@@ -37,9 +28,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Add new facility
-     */
     public function store(AddFacilitiesRequest $request)
     {
         DB::beginTransaction();
@@ -61,9 +49,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Update facility
-     */
     public function update(UpdateFacilitiesRequest $request)
     {
         $facilitie = Facilitie::find($request->id);
@@ -84,9 +69,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Delete facility
-     */
     public function destroy(DeleteFacilitiesRequest $request)
     {
         DB::beginTransaction();
@@ -101,9 +83,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Get facilities by building
-     */
     public function getByBuilding(GetFacilitiesByBuildingRequest $request)
     {
         try {
@@ -116,9 +95,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Get facilities by floor
-     */
     public function getByFloor(GetFacilitiesByFloorRequest $request)
     {
         try {
@@ -131,12 +107,7 @@ class FacilitiesController extends Controller
         }
     }
 
-    //=====================================Facilities Type===============================================
-
-    /**
-     * Get all facilities types
-     */
-    public function typeIndex(Request $request)
+    public function typeIndex()
     {
         try {
             $perPage = \returnPerPage();
@@ -147,9 +118,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Add new facility type
-     */
     public function typeStore(AddFacilitiesTypeRequest $request)
     {
         DB::beginTransaction();
@@ -167,9 +135,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Update facility type
-     */
     public function typeUpdate(UpdateFacilitiesTypeRequest $request)
     {
         $facilitiesType = FacilitiesType::find($request->id);
@@ -186,9 +151,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Delete facility type
-     */
     public function typeDestroy(DeleteFacilitiesTypeRequest $request)
     {
         DB::beginTransaction();
@@ -209,9 +171,6 @@ class FacilitiesController extends Controller
         }
     }
 
-    /**
-     * Get facility type by id
-     */
     public function typeShow(Request $request)
     {
         $request->validate([

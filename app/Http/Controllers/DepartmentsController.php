@@ -7,13 +7,10 @@ use Illuminate\Http\Request;
 use App\Http\Requests\Department\AddDepartmentRequest;
 use App\Http\Requests\Department\UpdateDepartmentRequest;
 use App\Http\Requests\Department\DeleteDepartmentRequest;
-use Exception;
+use App\Http\Requests\Department\ShowDepartmentRequest;
 
 class DepartmentsController extends Controller
 {
-    /**
-     * Get all departments with pagination
-     */
     public function index()
     {
         try {
@@ -25,9 +22,6 @@ class DepartmentsController extends Controller
         }
     }
 
-    /**
-     * Add a new department
-     */
     public function store(AddDepartmentRequest $request)
     {
         try {
@@ -42,20 +36,9 @@ class DepartmentsController extends Controller
         }
     }
 
-    /**
-     * Get department by ID
-     */
-    public function show(Request $request)
+    public function show(ShowDepartmentRequest $request)
     {
         try {
-            $validator = \Validator::make($request->all(), [
-                'id' => 'required|numeric|exists:departments,id',
-            ]);
-
-            if ($validator->fails()) {
-                return \Failed($validator->errors()->first());
-            }
-
             $department = Department::find($request->id);
 
             return \SuccessData('Department retrieved successfully', $department);
@@ -64,9 +47,6 @@ class DepartmentsController extends Controller
         }
     }
 
-    /**
-     * Update a department
-     */
     public function update(UpdateDepartmentRequest $request)
     {
         try {
@@ -83,9 +63,6 @@ class DepartmentsController extends Controller
         }
     }
 
-    /**
-     * Delete a department
-     */
     public function destroy(DeleteDepartmentRequest $request)
     {
         try {

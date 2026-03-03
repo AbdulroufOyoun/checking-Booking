@@ -3,17 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Guest_feature;
-use Illuminate\Http\Request;
 use App\Http\Requests\GuestFeature\AddGuestFeatureRequest;
 use App\Http\Requests\GuestFeature\UpdateGuestFeatureRequest;
 use App\Http\Requests\GuestFeature\DeleteGuestFeatureRequest;
-use Exception;
 
 class GuestFeaturesController extends Controller
 {
-    /**
-     * Get all guest features with pagination
-     */
     public function index()
     {
         try {
@@ -25,9 +20,6 @@ class GuestFeaturesController extends Controller
         }
     }
 
-    /**
-     * Add a new guest feature
-     */
     public function store(AddGuestFeatureRequest $request)
     {
         try {
@@ -43,9 +35,6 @@ class GuestFeaturesController extends Controller
         }
     }
 
-    /**
-     * Update a guest feature
-     */
     public function update(UpdateGuestFeatureRequest $request)
     {
         try {
@@ -63,9 +52,6 @@ class GuestFeaturesController extends Controller
         }
     }
 
-    /**
-     * Delete a guest feature
-     */
     public function destroy(DeleteGuestFeatureRequest $request)
     {
         try {

@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Feature;
 use App\Models\Room_feature;
-use App\Models\Room;
 use App\Http\Requests\Feature\AddFeatureRequest;
 use App\Http\Requests\Feature\UpdateFeatureRequest;
 use App\Http\Requests\Feature\DeleteFeatureRequest;
@@ -14,15 +13,9 @@ use App\Http\Requests\Feature\AddRoomFeatureRequest;
 use App\Http\Requests\Feature\UpdateRoomFeatureRequest;
 use App\Http\Requests\Feature\DeleteRoomFeatureRequest;
 use App\Http\Requests\Feature\GetRoomFeatureByRoomRequest;
-use Exception;
 
 class FeaturesController extends Controller
 {
-    //=====================================Features===============================================
-
-    /**
-     * Get all features with pagination
-     */
     public function index(Request $request)
     {
         try {
@@ -34,9 +27,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Add new feature
-     */
     public function store(AddFeatureRequest $request)
     {
         DB::beginTransaction();
@@ -54,9 +44,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Update feature
-     */
     public function update(UpdateFeatureRequest $request)
     {
         $feature = Feature::find($request->id);
@@ -73,9 +60,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Delete feature
-     */
     public function destroy(DeleteFeatureRequest $request)
     {
         DB::beginTransaction();
@@ -93,12 +77,7 @@ class FeaturesController extends Controller
         }
     }
 
-    //=====================================Room Features===============================================
-
-    /**
-     * Get all room features with pagination
-     */
-    public function roomIndex(Request $request)
+    public function roomIndex()
     {
         try {
             $perPage = \returnPerPage();
@@ -109,9 +88,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Add new room feature
-     */
     public function roomStore(AddRoomFeatureRequest $request)
     {
         DB::beginTransaction();
@@ -129,9 +105,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Update room feature
-     */
     public function roomUpdate(UpdateRoomFeatureRequest $request)
     {
         $roomFeature = Room_feature::find($request->id);
@@ -149,9 +122,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Delete room feature
-     */
     public function roomDestroy(DeleteRoomFeatureRequest $request)
     {
         DB::beginTransaction();
@@ -166,9 +136,6 @@ class FeaturesController extends Controller
         }
     }
 
-    /**
-     * Get room features by room
-     */
     public function getByRoom(GetRoomFeatureByRoomRequest $request)
     {
         try {

@@ -4,11 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Stay_reason;
 use App\Models\Reservation;
-use Illuminate\Http\Request;
 use App\Http\Requests\StayReason\AddStayReasonRequest;
 use App\Http\Requests\StayReason\UpdateStayReasonRequest;
 use App\Http\Requests\StayReason\DeleteStayReasonRequest;
-use Exception;
 
 class StayReasonsController extends Controller
 {

@@ -3,17 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Job_title;
-use Illuminate\Http\Request;
 use App\Http\Requests\JobTitle\AddJobTitleRequest;
 use App\Http\Requests\JobTitle\UpdateJobTitleRequest;
 use App\Http\Requests\JobTitle\DeleteJobTitleRequest;
-use Exception;
+use App\Http\Requests\JobTitle\GetJobTitleByDepartmentRequest;
 
 class JobTitlesController extends Controller
 {
-    /**
-     * Get all job titles with pagination
-     */
     public function index()
     {
         try {
@@ -25,9 +21,6 @@ class JobTitlesController extends Controller
         }
     }
 
-    /**
-     * Add a new job title
-     */
     public function store(AddJobTitleRequest $request)
     {
         try {
@@ -43,9 +36,6 @@ class JobTitlesController extends Controller
         }
     }
 
-    /**
-     * Update a job title
-     */
     public function update(UpdateJobTitleRequest $request)
     {
         try {
@@ -63,9 +53,6 @@ class JobTitlesController extends Controller
         }
     }
 
-    /**
-     * Delete a job title
-     */
     public function destroy(DeleteJobTitleRequest $request)
     {
         try {
@@ -83,20 +70,9 @@ class JobTitlesController extends Controller
         }
     }
 
-    /**
-     * Get job titles by department
-     */
-    public function getByDepartment(Request $request)
+    public function getByDepartment(GetJobTitleByDepartmentRequest $request)
     {
         try {
-            $validator = \Validator::make($request->all(), [
-                'department_id' => 'required|numeric|exists:departments,id',
-            ]);
-
-            if ($validator->fails()) {
-                return \Failed($validator->errors()->first());
-            }
-
             $jobTitles = Job_title::where('department_id', $request->department_id)
                 ->get();
 

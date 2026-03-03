@@ -6,13 +6,10 @@ use App\Http\Requests\Suite\AddSuiteRequest;
 use App\Http\Requests\Suite\DeleteSuiteRequest;
 use App\Http\Requests\Suite\UpdateSuiteRequest;
 use App\Http\Requests\Suite\SuiteIndexRequest;
-use App\Models\Building;
-use App\Models\Floor;
 use App\Models\Suite;
 use App\Models\Room;
-use Exception;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Exception;
 
 class SuiteController extends Controller
 {

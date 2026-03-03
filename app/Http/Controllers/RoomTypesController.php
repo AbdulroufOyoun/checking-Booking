@@ -11,9 +11,7 @@ use App\Http\Requests\RoomType\DeleteRoomTypeRequest;
 use App\Http\Requests\RoomType\AddRoomtypePricingRequest;
 use App\Http\Requests\RoomType\UpdateRoomtypePricingRequest;
 use App\Http\Requests\RoomType\DeleteRoomtypePricingRequest;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Exception;
 
 class RoomTypesController extends Controller
 {

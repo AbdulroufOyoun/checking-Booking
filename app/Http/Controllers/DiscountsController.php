@@ -7,13 +7,9 @@ use Illuminate\Http\Request;
 use App\Http\Requests\Discount\AddDiscountRequest;
 use App\Http\Requests\Discount\UpdateDiscountRequest;
 use App\Http\Requests\Discount\DeleteDiscountRequest;
-use Exception;
 
 class DiscountsController extends Controller
 {
-    /**
-     * Get all discounts with pagination
-     */
     public function index()
     {
         try {
@@ -25,9 +21,6 @@ class DiscountsController extends Controller
         }
     }
 
-    /**
-     * Add a new discount
-     */
     public function store(AddDiscountRequest $request)
     {
         try {
@@ -50,9 +43,6 @@ class DiscountsController extends Controller
         }
     }
 
-    /**
-     * Update a discount
-     */
     public function update(UpdateDiscountRequest $request)
     {
         try {
@@ -84,9 +74,6 @@ class DiscountsController extends Controller
         }
     }
 
-    /**
-     * Delete a discount
-     */
     public function destroy(DeleteDiscountRequest $request)
     {
         try {

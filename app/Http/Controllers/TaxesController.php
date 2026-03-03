@@ -3,17 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tax;
-use Illuminate\Http\Request;
 use App\Http\Requests\Tax\AddTaxRequest;
 use App\Http\Requests\Tax\UpdateTaxRequest;
 use App\Http\Requests\Tax\DeleteTaxRequest;
-use Exception;
 
 class TaxesController extends Controller
 {
-    /**
-     * Get all taxes with pagination
-     */
+
     public function index()
     {
         try {
@@ -25,9 +21,6 @@ class TaxesController extends Controller
         }
     }
 
-    /**
-     * Add a new tax
-     */
     public function store(AddTaxRequest $request)
     {
         try {
@@ -45,9 +38,6 @@ class TaxesController extends Controller
         }
     }
 
-    /**
-     * Update a tax
-     */
     public function update(UpdateTaxRequest $request)
     {
         try {
@@ -67,9 +57,6 @@ class TaxesController extends Controller
         }
     }
 
-    /**
-     * Delete a tax
-     */
     public function destroy(DeleteTaxRequest $request)
     {
         try {
