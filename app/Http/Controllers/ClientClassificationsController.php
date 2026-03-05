@@ -7,231 +7,116 @@ use App\Models\Guest_classification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Exception;
+use App\Http\Requests\ClientClassification\AssignClassificationRequest;
+use App\Http\Requests\ClientClassification\GetClientClassificationRequest;
+use App\Http\Requests\ClientClassification\RemoveClassificationRequest;
+use App\Http\Requests\ClientClassification\SearchClientWithClassificationRequest;
 
 class ClientClassificationsController extends Controller
 {
-    /**
-     * إضافة تصنيف جديد لعميل (يعمل بين قاعدتي البيانات)
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function assignClassification(Request $request)
-    {
-        $request->validate([
-            'client_id' => 'required|numeric',
-            'classifications_id' => 'required|numeric|exists:mysql.guest_classifications,id',
-        ]);
 
+    public function assignClassification(AssignClassificationRequest $request)
+    {
         try {
-            // التحقق من وجود العميل في قاعدة البيانات الثانية
             $client = DB::connection('mysql2')
                 ->table('clients')
                 ->where('id', $request->client_id)
                 ->first();
 
             if (!$client) {
-                return response()->json([
-                    'result' => 'failed',
-                    'error' => 'Client not found in database'
-                ], 404);
+                return \Failed('Client not found in database');
             }
 
-            // التحقق من وجود التصنيف
             $classification = Guest_classification::find($request->classifications_id);
             if (!$classification) {
-                return response()->json([
-                    'result' => 'failed',
-                    'error' => 'Classification not found'
-                ], 404);
+                return \Failed('Classification not found');
             }
 
-            // حذف أي تصنيف سابق للعميل
             Client_Classifications::where('client_id', $request->client_id)->delete();
 
-            // إضافة التصنيف الجديد
+
             $clientClassification = Client_Classifications::create([
                 'client_id' => $request->client_id,
                 'classifications_id' => $request->classifications_id,
             ]);
 
-            return response()->json([
-                'result' => 'success',
-                'data' => [
-                    'client_id' => $clientClassification->client_id,
-                    'classification_id' => $clientClassification->classifications_id,
-                    'classification_name' => $classification->name_ar,
-                ],
-                'message' => 'Classification assigned to client successfully'
-            ]);
+            $data = [
+                'client_id' => $clientClassification->client_id,
+                'classification_id' => $clientClassification->classifications_id,
+                'classification_name' => $classification->name_ar,
+            ];
+
+            return \SuccessData('Classification assigned to client successfully', $data);
         } catch (Exception $e) {
-            return response()->json([
-                'result' => 'failed',
-                'error' => $e->getMessage()
-            ], 500);
+            return \Failed($e->getMessage());
         }
     }
 
-    /**
-     * جلب تصنيفات عميل معين
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getClientClassification(Request $request)
-    {
-        $request->validate([
-            'client_id' => 'required|numeric',
-        ]);
 
+    public function getClientClassification(GetClientClassificationRequest $request)
+    {
         try {
-            // جلب العميل من قاعدة البيانات الثانية
             $client = DB::connection('mysql2')
                 ->table('clients')
                 ->where('id', $request->client_id)
                 ->first();
 
             if (!$client) {
-                return response()->json([
-                    'result' => 'failed',
-                    'error' => 'Client not found'
-                ], 404);
+                return \Failed('Client not found');
             }
 
-            // جلب التصنيف من قاعدة البيانات الرئيسية
             $clientClassification = Client_Classifications::where('client_id', $request->client_id)
                 ->with('guestClassification')
                 ->first();
 
-            return response()->json([
-                'result' => 'success',
+            $data = [
                 'client' => $client,
                 'classification' => $clientClassification ? $clientClassification->guestClassification : null,
-            ]);
+            ];
+
+            return \SuccessData('Client classification retrieved successfully', $data);
         } catch (Exception $e) {
-            return response()->json([
-                'result' => 'failed',
-                'error' => $e->getMessage()
-            ], 500);
+            return \Failed($e->getMessage());
         }
     }
 
-    /**
-     * حذف تصنيف من عميل
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function removeClassification(Request $request)
-    {
-        $request->validate([
-            'client_id' => 'required|numeric',
-        ]);
 
+    public function removeClassification(RemoveClassificationRequest $request)
+    {
         try {
             $deleted = Client_Classifications::where('client_id', $request->client_id)->delete();
 
             if ($deleted) {
-                return response()->json([
-                    'result' => 'success',
-                    'message' => 'Classification removed from client successfully'
-                ]);
+                return \Success('Classification removed from client successfully');
             }
 
-            return response()->json([
-                'result' => 'failed',
-                'error' => 'No classification found for this client'
-            ], 404);
+            return \Failed('No classification found for this client');
         } catch (Exception $e) {
-            return response()->json([
-                'result' => 'failed',
-                'error' => $e->getMessage()
-            ], 500);
+            return \Failed($e->getMessage());
         }
     }
 
-    /**
-     * جلب جميع العملاء مع تصنيفاتهم
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getAllClientsWithClassification(Request $request)
+    public function getAllClientsWithClassification()
     {
         try {
-            // جلب جميع العملاء من قاعدة البيانات الثانية
-            $clients = DB::connection('mysql2')
-                ->table('clients')
-                ->get();
+    $classificationsData = Client_Classifications::with('guestClassification')->get();
 
-            // جلب جميع التصنيفات
-            $classifications = Client_Classifications::with('guestClassification')->get();
+    $clientIds = $classificationsData->pluck('client_id')->unique()->filter()->toArray();
 
-            // دمج البيانات
-            $result = $clients->map(function ($client) use ($classifications) {
-                $classification = $classifications->where('client_id', $client->id)->first();
-                return [
-                    'client' => $client,
-                    'classification' => $classification ? $classification->guestClassification : null,
-                ];
-            });
+    $clients = DB::connection('mysql2')
+        ->table('clients')
+        ->whereIn('id', $clientIds)
+        ->get()
+        ->keyBy('id');
 
-            return response()->json([
-                'result' => 'success',
-                'data' => $result
-            ]);
+    $classificationsData->transform(function ($item) use ($clients) {
+        $item->client_details = $clients->get($item->client_id) ?? null;
+        return $item;
+    });
+            return \SuccessData('All clients with classifications fetched successfully', $classificationsData);
+
         } catch (Exception $e) {
-            return response()->json([
-                'result' => 'failed',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * البحث عن عميل وتصنيفه
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function searchClientWithClassification(Request $request)
-    {
-        $request->validate([
-            'search' => 'required|string|min:3',
-        ]);
-
-        try {
-            // البحث في قاعدة البيانات الثانية
-            $clients = DB::connection('mysql2')
-                ->table('clients')
-                ->where('first_name', 'like', '%' . $request->search . '%')
-                ->orWhere('last_name', 'like', '%' . $request->search . '%')
-                ->orWhere('mobile', 'like', '%' . $request->search . '%')
-                ->orWhere('IdNumber', 'like', '%' . $request->search . '%')
-                ->limit(20)
-                ->get();
-
-            // جلب التصنيفات
-            $classifications = Client_Classifications::with('guestClassification')->get();
-
-            // دمج البيانات
-            $result = $clients->map(function ($client) use ($classifications) {
-                $classification = $classifications->where('client_id', $client->id)->first();
-                return [
-                    'client' => $client,
-                    'classification' => $classification ? $classification->guestClassification : null,
-                ];
-            });
-
-            return response()->json([
-                'result' => 'success',
-                'data' => $result
-            ]);
-        } catch (Exception $e) {
-            return response()->json([
-                'result' => 'failed',
-                'error' => $e->getMessage()
-            ], 500);
+            return \Failed($e->getMessage());
         }
     }
 }

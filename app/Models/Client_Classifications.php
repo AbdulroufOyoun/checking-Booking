@@ -15,6 +15,5 @@ class Client_Classifications extends Model
 
     public function guestClassification()
     {
-        return $this->belongsTo(Guest_classification::class, 'classifications_id');
-    }
+return $this->belongsTo(Guest_classification::class, 'classifications_id', 'id');    }
 }

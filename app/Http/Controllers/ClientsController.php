@@ -6,13 +6,9 @@ use App\Models\Client;
 use Illuminate\Http\Request;
 use App\Http\Requests\Client\AddClientRequest;
 use App\Http\Requests\Client\GetClientByRequest;
-use Exception;
 
 class ClientsController extends Controller
 {
-    /**
-     * Get all clients with pagination
-     */
     public function index()
     {
         try {
@@ -24,9 +20,6 @@ class ClientsController extends Controller
         }
     }
 
-    /**
-     * Add a new client
-     */
     public function store(AddClientRequest $request)
     {
         try {
@@ -50,14 +43,12 @@ class ClientsController extends Controller
         }
     }
 
-    /**
-     * Get client by mobile or email
-     */
     public function getBy(GetClientByRequest $request)
     {
         try {
             $client = Client::where('mobile', $request->mobile)
                 ->orWhere('email', $request->email)
+                ->orWhere('IdNumber', $request->IdNumber)
                 ->first();
 
             if (!$client) {

@@ -12,9 +12,6 @@ use App\Http\Requests\GuestClassificationFeature\GetGuestClassificationFeatureBy
 
 class GuestClassificationFeaturesController extends Controller
 {
-    /**
-     * Get all guest classification-feature relationships with pagination
-     */
     public function index()
     {
         try {
@@ -26,9 +23,6 @@ class GuestClassificationFeaturesController extends Controller
         }
     }
 
-    /**
-     * Get all features for a specific classification
-     */
     public function getFeaturesByClassification(GetGuestClassificationFeatureByClassificationRequest $request)
     {
         try {
@@ -40,9 +34,6 @@ class GuestClassificationFeaturesController extends Controller
         }
     }
 
-    /**
-     * Add a feature to a guest classification
-     */
     public function store(AddGuestClassificationFeatureRequest $request)
     {
         try {
@@ -66,9 +57,6 @@ class GuestClassificationFeaturesController extends Controller
         }
     }
 
-    /**
-     * Remove a feature from a guest classification by ID
-     */
     public function destroy(DeleteGuestClassificationFeatureRequest $request)
     {
         try {
