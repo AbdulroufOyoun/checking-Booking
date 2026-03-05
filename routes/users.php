@@ -178,9 +178,8 @@ Route::post('addGuestClassificationFeature', [GuestClassificationFeaturesControl
 Route::delete('deleteGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'destroy']);
 
 //=====================================ClientClassification (Cross-Database)=======================
-// ربط العميل بالتصنيف - يعمل بين قاعدتي البيانات (mysql2 و mysql)
-Route::post('assignClientClassification', [ClientClassificationsController::class, 'assignClassification']);
-Route::post('getClientClassification', [ClientClassificationsController::class, 'getClientClassification']);
-Route::delete('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);
 Route::get('getAllClientsWithClassification', [ClientClassificationsController::class, 'getAllClientsWithClassification']);
-Route::post('searchClientWithClassification', [ClientClassificationsController::class, 'searchClientWithClassification']);
+Route::post('assignClientClassification', [ClientClassificationsController::class, 'assignClassification']);
+Route::get('getClientClassification', [ClientClassificationsController::class, 'getClientClassification']);
+// Route::post('searchClientWithClassification', [ClientClassificationsController::class, 'searchClientWithClassification']);
+Route::delete('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);

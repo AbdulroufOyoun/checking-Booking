@@ -6,9 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * تحديد الاتصال الذي سيتم استخدامه لهذا الـ Migration.
-     */
+
     protected $connection = 'mysql2';
 
     /**

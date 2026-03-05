@@ -7,13 +7,9 @@ use Illuminate\Http\Request;
 use App\Http\Requests\GuestClassification\AddGuestClassificationRequest;
 use App\Http\Requests\GuestClassification\UpdateGuestClassificationRequest;
 use App\Http\Requests\GuestClassification\DeleteGuestClassificationRequest;
-use Exception;
 
 class GuestClassificationsController extends Controller
 {
-    /**
-     * Get all guest classifications with pagination
-     */
     public function index()
     {
         try {
@@ -25,9 +21,6 @@ class GuestClassificationsController extends Controller
         }
     }
 
-    /**
-     * Add a new guest classification
-     */
     public function store(AddGuestClassificationRequest $request)
     {
         try {
@@ -45,9 +38,6 @@ class GuestClassificationsController extends Controller
         }
     }
 
-    /**
-     * Update a guest classification
-     */
     public function update(UpdateGuestClassificationRequest $request)
     {
         try {
@@ -67,9 +57,6 @@ class GuestClassificationsController extends Controller
         }
     }
 
-    /**
-     * Delete a guest classification
-     */
     public function destroy(DeleteGuestClassificationRequest $request)
     {
         try {
