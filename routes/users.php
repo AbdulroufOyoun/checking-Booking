@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Users;
-use App\Http\Controllers\Buildings;
 use App\Http\Controllers\BuildingsController;
 use App\Http\Controllers\FloorController;
 use App\Http\Controllers\SuiteController;
@@ -32,7 +30,7 @@ Route::post('login', [UsersController::class, 'login']);
 // Route::middleware(['can_do:manage_settings'])->group(function () {
 // });
 // Building
-// Route::group(['middleware' => 'auth:sanctum'], function () {
+Route::group(['middleware' => ['auth:api']], function () {
 //=========================================Buildings=============================================
 //Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
 Route::get('buildings', [BuildingsController::class, 'index']);
@@ -158,13 +156,14 @@ Route::delete('/deleteDepartment', [DepartmentsController::class, 'destroy']);
 //=====================================Users======================================================
 Route::post('/addUser', [UsersController::class, 'store']);
 Route::post('/updateUser', [UsersController::class, 'update']);
-Route::post('/inActiveUser', [UsersController::class, 'inActive']);
+Route::get('/inActiveUser', [UsersController::class, 'inActive']);
 Route::get('/getInfoUsers', [UsersController::class, 'index']);
 //=====================================GuestClassification=======================================
 Route::get('/getGuestClassification', [GuestClassificationsController::class, 'index']);
 Route::post('addGuestClassification', [GuestClassificationsController::class, 'store']);
 Route::post('updateGuestClassification', [GuestClassificationsController::class, 'update']);
 Route::delete('deleteGuestClassification', [GuestClassificationsController::class, 'destroy']);
+
 //=====================================GuestFeature==============================================
 Route::get('getGuestFeature', [GuestFeaturesController::class, 'index']);
 Route::post('addGuestFeature', [GuestFeaturesController::class, 'store']);
@@ -181,5 +180,6 @@ Route::delete('deleteGuestClassificationFeature', [GuestClassificationFeaturesCo
 Route::get('getAllClientsWithClassification', [ClientClassificationsController::class, 'getAllClientsWithClassification']);
 Route::post('assignClientClassification', [ClientClassificationsController::class, 'assignClassification']);
 Route::get('getClientClassification', [ClientClassificationsController::class, 'getClientClassification']);
-// Route::post('searchClientWithClassification', [ClientClassificationsController::class, 'searchClientWithClassification']);
 Route::delete('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);
+});
+Route::get('login_error',[UsersController::class , 'loginError'])->name('login');

@@ -26,24 +26,22 @@ class UsersController extends Controller
      */
     public function login(LoginRequest $request)
     {
-        $user = User::where('job_number', $request->job_number)->first();
-
-        if (!$user) {
-            return \Failed('User not found');
-        }
-
-        if (!$user->active) {
+        $arr = Arr::only($request->validated(), ['job_number', 'password' ]);
+        $where = ['job_number' => $arr['job_number']];
+        $user = User::where( $where)->first();
+    if (!$user->active) {
             return \Failed('This account is disActive');
         }
+        if (!Hash::check($arr['password'], $user->password)) {
+            return \Failed('Wrong Password'); }
 
-        if (!Hash::check($request->password, $user->password)) {
-            return \Failed('Wrong Password');
-        }
-
-        $user['token'] = $user->createToken('authToken');
         $user['permissions'] = $user->permissions();
-        return \SuccessData('Login Successful', new LoginResource($user));
-    }
+
+        $user->tokens()->delete();
+
+         $user['token'] = $user->createToken('authToken');
+        return \SuccessData("Logged In Success", new LoginResource($user));
+        }
 
     /**
      * Add new user
@@ -52,6 +50,7 @@ class UsersController extends Controller
     {
         DB::beginTransaction();
         try {
+
             $user = User::create([
                 'name'          => $request->name,
                 'job_number'    => $request->job_number,
@@ -61,7 +60,7 @@ class UsersController extends Controller
                 'email'         => $request->email,
                 'discount_id'   => $request->discount_id ?? null,
                 'active'        => 1,
-                'password'      => Hash::make($request->job_number),
+                'password'      => Hash::make($request->password),
             ]);
 
             if ($request->has('permission_ids')) {
@@ -169,5 +168,13 @@ class UsersController extends Controller
             ];
         }
         User_permission::insert($data);
+    }
+
+    public function loginError(){
+        return response()->json([
+            'success'=>false,
+            'message'=>'You need to Sign In to access',
+            'code'=>403
+        ],403);
     }
 }
