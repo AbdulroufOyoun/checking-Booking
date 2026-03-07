@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             PermissionSeeder::class,
             PeakDayAndMonthSeeder::class,
+            UserSeeder::class,
         ]);
     }
 }

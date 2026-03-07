@@ -39,7 +39,7 @@ if (!function_exists('Failed')) {
 }
 
 if (!function_exists('Pagination')) {
-    function    Pagination($data)
+    function Pagination($data)
     {
         $data = $data->toArray();
 

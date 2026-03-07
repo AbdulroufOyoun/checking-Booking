@@ -13,36 +13,36 @@ use App\Http\Resources\UserResource;
 use App\Http\Requests\User\AddUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Http\Requests\User\InActiveUserRequest;
+use App\Http\Requests\User\LoginRequest;
+use App\Http\Resources\Login\LoginResource;
 use Exception;
+use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
 
 class UsersController extends Controller
 {
     /**
      * Login user
      */
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $request->validate([
-            'job_number' => 'required|string',
-            'password'   => 'required|min:4',
-        ]);
-
         $user = User::where('job_number', $request->job_number)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return \Failed("Login failed", 200);
+        if (!$user) {
+            return \Failed('User not found');
         }
 
-        if ($user->active === 0) {
-            return \Failed("The account has been deleted, cannot log in", 200);
+        if (!$user->active) {
+            return \Failed('This account is disActive');
         }
 
-        $token = $user->createToken('token')->plainTextToken;
+        if (!Hash::check($request->password, $user->password)) {
+            return \Failed('Wrong Password');
+        }
 
-        return \SuccessData('Login successful', [
-            'id' => $user->id,
-            'token' => $token
-        ]);
+        $user['token'] = $user->createToken('authToken');
+        $user['permissions'] = $user->permissions();
+        return \SuccessData('Login Successful', new LoginResource($user));
     }
 
     /**
@@ -130,7 +130,7 @@ class UsersController extends Controller
         }
 
         try {
-            $user->update(['active' => 0]);
+            $user->update(['active' => !$user->active]);
             return \Success('User deactivated successfully');
         } catch (Exception $e) {
             return \Failed($e->getMessage());
@@ -140,22 +140,14 @@ class UsersController extends Controller
     /**
      * Get all users info
      */
-    public function index(Request $request)
+    public function index()
     {
         try {
-            $activeUsers = User::with(['jobtitle', 'department', 'discount', 'permissions'])->where('active', 1)->get();
-            $inactiveUsers = User::with(['jobtitle', 'department', 'discount', 'permissions'])->where('active', 0)->get();
-            $jobTitle = Job_title::all();
-            $department = Department::all();
-
-            $data = [
-                'active_users' => UserResource::collection($activeUsers),
-                'inactive_users' => UserResource::collection($inactiveUsers),
-                'department' => $department,
-                'jobTitle' => $jobTitle
-            ];
-
-            return \SuccessData('Users fetched successfully', $data);
+            $perPage = \returnPerPage();
+            $activeUsers = User::with(['jobtitle', 'department', 'discount', 'permissions'])
+                ->where('active', 1)
+                ->paginate($perPage);
+            return \Pagination($activeUsers);
         } catch (Exception $e) {
             return \Failed($e->getMessage());
         }
