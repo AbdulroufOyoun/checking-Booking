@@ -40,7 +40,6 @@ class Room extends Model
 
     function isHasReservation()
     {
-        $res = Reservation::where('room_id', $this->id)->exists();
-        return $res;
+        return Reservation::where('room_id', $this->id)->exists();
     }
 }
