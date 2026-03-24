@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Http\Requests\Reservation;
+namespace App\Http\Requests\RoomType;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Contracts\Validation\Validator;
 
-class CheckReservationRequest extends FormRequest
+class AddRoomtypePricingPlanRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -16,14 +16,11 @@ class CheckReservationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'building_id' => 'required|numeric|exists:buildings,id',
-            'floor_id'    => 'nullable|numeric',
-            'capacity'    => 'nullable|numeric',
-            'room_type'   => 'required|numeric|exists:room_types,id',
-            'suite_id'    => 'nullable|numeric|exists:suites,id',
-            'start_date'  => 'required|date',
-            'expire_date' => 'required|date',
-            'type_search' => 'required|numeric|in:1,2',
+            'pricingplan_id' => 'required|exists:pricing_plans,id',
+            'roomtype_id' => 'required|exists:room_types,id',
+            'DailyPrice' => 'required|numeric|min:0',
+            'MonthlyPrice' => 'required|numeric|min:0',
+            'YearlyPrice' => 'required|numeric|min:0',
         ];
     }
 

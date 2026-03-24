@@ -23,6 +23,7 @@ use App\Http\Controllers\GuestClassificationsController;
 use App\Http\Controllers\GuestFeaturesController;
 use App\Http\Controllers\GuestClassificationFeaturesController;
 use App\Http\Controllers\ClientClassificationsController;
+use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\UsersController;
 
 
@@ -63,6 +64,7 @@ Route::post('/updateRoomType', [RoomTypesController::class, 'updateRoomType']);
 Route::post('/deleteRoomType', [RoomTypesController::class, 'deleteRoomType']);
 Route::get('/getRoomtypePricing', [RoomTypesController::class, 'getRoomtypePricing']);
 Route::post('/addRoomtypePricing', [RoomTypesController::class, 'addRoomtypePricing']);
+Route::post('/addRoomtypePricingPlan', [RoomTypesController::class, 'addRoomtypePricingPlan']);
 Route::post('/updateRoomtypePricing', [RoomTypesController::class, 'updateRoomtypePricing']);
 Route::post('/deleteRoomtypePricing', [RoomTypesController::class, 'deleteRoomtypePricing']);
 
@@ -176,10 +178,20 @@ Route::get('getGuestClassificationFeatureByClassification', [GuestClassification
 Route::post('addGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'store']);
 Route::delete('deleteGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'destroy']);
 
-//=====================================ClientClassification (Cross-Database)=======================
+//=====================================ClientClassification=======================
 Route::get('getAllClientsWithClassification', [ClientClassificationsController::class, 'getAllClientsWithClassification']);
 Route::post('assignClientClassification', [ClientClassificationsController::class, 'assignClassification']);
 Route::get('getClientClassification', [ClientClassificationsController::class, 'getClientClassification']);
 Route::delete('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);
+
+
+//=========================================Reservation=============================================
+Route::post('makeReservation', [ReservationController::class, 'makeReservation']);
+Route::get('checkReservation', [ReservationController::class, 'checkReservation']);
+Route::post('getRoomPrice', [ReservationController::class, 'getRoomPrice']);
+// Route::get('getReservation', [ReservationController::class, 'getReservation']);
+// Route::post('getReservationByStudent', [ReservationController::class, 'getReservationByStudent']);
+// Route::post('setReservationUnavailable', [ReservationController::class, 'setReservationUnavailable']);
+// Route::post('getReservationByRoom', [ReservationController::class, 'getReservationByRoom']);
 });
 Route::get('login_error',[UsersController::class , 'loginError'])->name('login');

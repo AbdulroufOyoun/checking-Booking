@@ -9,6 +9,7 @@ use App\Http\Requests\RoomType\AddRoomTypeRequest;
 use App\Http\Requests\RoomType\UpdateRoomTypeRequest;
 use App\Http\Requests\RoomType\DeleteRoomTypeRequest;
 use App\Http\Requests\RoomType\AddRoomtypePricingRequest;
+use App\Http\Requests\RoomType\AddRoomtypePricingPlanRequest;
 use App\Http\Requests\RoomType\UpdateRoomtypePricingRequest;
 use App\Http\Requests\RoomType\DeleteRoomtypePricingRequest;
 use Illuminate\Support\Facades\DB;
@@ -77,7 +78,7 @@ class RoomTypesController extends Controller
             $roomType = RoomType::find($request->id);
 
             if ($roomType->rooms()->exists()) {
-                return Failed('لا يمكن حذف نوع الغرفة لأنه مرتبط بغرف موجودة');
+                return Failed('Can not delete this Room type');
             }
 
             $roomType->delete();
@@ -155,6 +156,44 @@ class RoomTypesController extends Controller
                 'YearlyPrice' => $roomTypePricing->YearlyPrice,
             ];
             return SuccessData('Pricing plan added successfully', $data);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Failed($e->getMessage());
+        }
+    }
+
+    public function addRoomtypePricingPlan(AddRoomtypePricingPlanRequest $request)
+    {
+        try {
+            DB::beginTransaction();
+
+            $pricingPlan = Pricingplan::findOrFail($request->pricingplan_id);
+            $roomTypePricing = RoomtypePricingplan::create([
+                'roomtype_id' => $request->roomtype_id,
+                'pricingplan_id' => $pricingPlan->id,
+                'DailyPrice' => $request->DailyPrice,
+                'MonthlyPrice' => $request->MonthlyPrice,
+                'YearlyPrice' => $request->YearlyPrice ?? 0,
+            ]);
+
+            DB::commit();
+
+            $data = [
+                'id' => $roomTypePricing->id,
+                'roomtype_id' => $roomTypePricing->roomtype_id,
+                'roomtype_nameAr' => $roomTypePricing->roomType->name_ar ?? '',
+                'roomtype_nameEn' => $roomTypePricing->roomType->name_en ?? '',
+                'pricingplan_id' => $pricingPlan->id,
+                'pricingplan_nameAr' => $pricingPlan->NameAr,
+                'pricingplan_nameEn' => $pricingPlan->NameEn,
+                'pricingplan_StartDate' => $pricingPlan->StartDate,
+                'pricingplan_EndDate' => $pricingPlan->EndDate,
+                'pricingplan_ActiveType' => $pricingPlan->ActiveType,
+                'DailyPrice' => $roomTypePricing->DailyPrice,
+                'MonthlyPrice' => $roomTypePricing->MonthlyPrice,
+                'YearlyPrice' => $roomTypePricing->YearlyPrice,
+            ];
+            return SuccessData('Roomtype pricing plan added successfully', $data);
         } catch (\Exception $e) {
             DB::rollBack();
             return Failed($e->getMessage());

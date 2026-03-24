@@ -20,7 +20,7 @@ class LoginResource extends JsonResource
              'job_number'=>$this->job_number,
         'jobtitle_id'=>$this->jobtitle_id,
         'department_id'=>$this->department_id,
-        'discount_id'=>$this->discount_id,
+        'discount'=>$this->discount,
         'mobile'=>$this->mobile,
         'email'=>$this->email,
         'permission'=>$this->permission,

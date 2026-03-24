@@ -2,57 +2,165 @@
 
 namespace App\Http\Controllers;
 
-
 use App\Models\PeakDay;
 use App\Models\PeakMonth;
 use App\Models\Reservation;
-use App\Models\User;
+use App\Models\ReservationRoom;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomtypePricingplan;
+use App\Models\Suite;
 use Carbon\Carbon;
-
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\Reservation\MakeReservationRequest;
 use App\Http\Requests\Reservation\CheckReservationRequest;
 use App\Http\Requests\Reservation\GetRoomPriceRequest;
 use App\Http\Requests\Reservation\GetReservationByDateRequest;
-use App\Http\Requests\Reservation\GetReservationByRoomRequest;
-use App\Http\Requests\Reservation\SetReservationUnavailableRequest;
-
-
+use Illuminate\Support\Facades\Log;
+use App\Http\Resources\Room\AvailableRoomResource;
 class ReservationController extends Controller
 {
-
     public function makeReservation(MakeReservationRequest $request)
     {
         try {
             DB::beginTransaction();
+
+            // حساب سعر الغرف تلقائياً (مثل getRoomPrice)
+            $startDate = Carbon::parse($request->start_date);
+            $endDate = Carbon::parse($request->expire_date);
+            $nights = $startDate->diffInDays($endDate);
+            $start = $startDate->toDateString();
+            $end = $endDate->toDateString();
+            $totalBasePrice = 0;
+            $roomsData = [];
+
+
+            if ($request->has('rooms') && is_array($request->rooms) && !empty($request->rooms)) {
+                foreach ($request->rooms as $roomData) {
+                    if (isset($roomData['suite_id']) && $roomData['suite_id']) {
+                        $suite = Suite::find($roomData['suite_id']);
+                        if (!$suite) {
+                            throw new \Exception("Suite not found: " . $roomData['suite_id']);
+                        }
+
+                        $suiteRooms = $suite->rooms()->where('active', 1)->get();
+
+                        if ($suiteRooms->isEmpty()) {
+                            throw new \Exception("No active rooms found in suite: " . $roomData['suite_id']);
+                        }
+
+
+                        foreach ($suiteRooms as $room) {
+                            $roomPrice = $this->calculateRoomPrice(
+                                $room,
+                                $start,
+                                $end,
+                                $request->rent_type,
+                                $request->price_calculation_mode ?? 0
+                            );
+
+                            $totalBasePrice += $roomPrice;
+
+                            $roomsData[] = [
+                                'room_id'   => $room->id,
+                                'suite_id'  => $roomData['suite_id'],
+                                'price'     => $roomPrice,
+                            ];
+                        }
+                    } else {
+                        $room = Room::find($roomData['room_id']);
+                        if (!$room) {
+                            throw new \Exception("Room not found: " . $roomData['room_id']);
+                        }
+
+                        $roomPrice = $this->calculateRoomPrice(
+                            $room,
+                            $start,
+                            $end,
+                            $request->rent_type,
+                            $request->price_calculation_mode ?? 0
+                        );
+
+                        $totalBasePrice += $roomPrice;
+
+                        $roomsData[] = [
+                            'room_id'   => $roomData['room_id'],
+                            'suite_id'  => $roomData['suite_id'] ?? null,
+                            'price'     => $roomPrice,
+                        ];
+                    }
+                }
+            }
+
+            foreach ($roomsData as $index => $roomData) {
+                $room = Room::find($roomData['room_id']);
+                if (!$room) {
+                    throw new \Exception('Room not found: ' . $roomData['room_id']);
+                }
+                if (!$this->isRoomAvailable($roomData['room_id'], $startDate->toDateString(), $endDate->toDateString())) {
+                    throw new \Exception('Room ' . ($room->room_number ?? $roomData['room_id']) . ' is not available for dates ' . $start . ' to ' . $end);
+                }
+            }
+
+             $user = auth()->user();
+            $discount = $request->discount ?? 0;
+            if ($discount > 0) {
+                $userDiscount = $user->discount;
+                if (!$userDiscount || !$userDiscount->is_active) {
+                    throw new \Exception('You do not have active discount permission');
+                }
+                $hasPermission = false;
+                if ($userDiscount->percent>0) {
+
+                    $hasPermission = $totalBasePrice *$user->discount->percent/100 >= $discount;
+                    if (!$hasPermission) {
+                    throw new \Exception('Discount amount exceeds your permission (max ' .  $userDiscount->percent.  '%)');
+                }
+                } else {
+                    $hasPermission = $userDiscount->fixed_amount >= $discount;
+                     if (!$hasPermission) {
+                    throw new \Exception('Discount amount exceeds your permission (max '. $userDiscount->fixed_amount . ')');
+                }
+                }
+            }
+            $extras = $request->extras ?? 0;
+            $penalties = $request->penalties ?? 0;
+            $taxes = $request->taxes ?? 0;
+
+            $subtotal = $totalBasePrice;
+            $total = $totalBasePrice - $discount + $extras + $penalties + $taxes;
+
             $reservation = Reservation::create([
                 'client_id'          => $request->client_id,
-                'room_id'            => $request->room_id,
-                'room_suite'         => $request->room_suite,
-                'multi_room'         => $request->multi_room,
-                'additional_rooms_ids' => $request->additional_rooms_ids ?? '',
                 'start_date'         => $request->start_date,
-                'nights'             => $request->nights,
+                'nights'             => $nights,
                 'expire_date'        => $request->expire_date,
                 'reservation_type'   => $request->reservation_type,
                 'reservation_status' => $request->reservation_status ?? 0,
                 'stay_reason_id'     => $request->stay_reason_id,
                 'reservation_source_id' => $request->reservation_source_id,
                 'rent_type'          => $request->rent_type,
-                'base_price'         => $request->base_price,
-                'discount'           => $request->discount ?? 0,
-                'extras'             => $request->extras ?? 0,
-                'penalties'          => $request->penalties ?? 0,
-                'subtotal'           => $request->subtotal,
-                'taxes'              => $request->taxes ?? 0,
-                'total'              => $request->total,
+                'base_price'         => $totalBasePrice,
+                'discount'           => $discount,
+                'extras'             => $extras,
+                'penalties'          => $penalties,
+                'subtotal'           => $subtotal,
+                'taxes'              => $taxes,
+                'total'              => $total,
                 'logedin'            => $request->logedin ?? 1,
                 'login_time'         => $request->login_time,
-                'user_id'            => $request->user_id,
+                'user_id'            => $user->id,
             ]);
+
+            foreach ($roomsData as $roomData) {
+                ReservationRoom::create([
+                    'reservation_id' => $reservation->id,
+                    'room_id'        => $roomData['room_id'],
+                    'suite_id'       => $roomData['suite_id'],
+                    'price'          => $roomData['price'],
+                ]);
+            }
+
             DB::commit();
             return \SuccessData('Reservation created successfully', $reservation);
         } catch (\Exception $e) {
@@ -61,49 +169,210 @@ class ReservationController extends Controller
         }
     }
 
+    /**
+     * NEW: Check if room is available for given dates
+     * Reuses logic from checkReservation
+     */
+    private function isRoomAvailable($roomId, $startDate, $endDate): bool
+    {
+        return !ReservationRoom::where('room_id', $roomId)
+            ->whereHas('reservation', function ($query) use ($startDate, $endDate) {
+                $query->where('expire_date', '>', $startDate)  // Changed >= now() to > startDate, allows end_date == start_date
+                    ->where(function ($q) use ($startDate, $endDate) {
+                        $q->where('start_date', '<', $endDate)
+                            ->orWhere('expire_date', '>', $startDate)
+                            ->orWhere(function ($q) use ($startDate, $endDate) {
+                                $q->where('start_date', '<=', $startDate)
+                                    ->where('expire_date', '>=', $endDate);
+                            });
+                    });
+            })->exists();
+    }
+
+    /**
+     * حساب سعر الغرفة تلقائياً (نفس منطق getRoomPrice)
+     */
+    private function calculateRoomPrice($room, $start, $end, $rentType, $priceMode = 0)
+    {
+        $startDate = Carbon::parse($start);
+        $endDate = Carbon::parse($end);
+
+        $roomType = RoomType::find($room->room_type_id);
+        $roomTypePlan = RoomtypePricingplan::with(['pricingplan', 'roomType'])->where('roomtype_id', $room->room_type_id)
+            ->whereHas('pricingplan', function ($query) use ($start, $end) {
+                $query->where('StartDate', '<=', $end)
+                    ->where('EndDate', '>=', $start);
+            })->first();
+
+        $totalPrice = 0;
+
+        // يومي
+        if ($rentType == 0) {
+            $nights = $startDate->diffInDays($endDate);
+
+            switch ($priceMode) {
+                case 0: // Current mixed logic
+                    if ($roomTypePlan) {
+                        $planStart = Carbon::parse($roomTypePlan->pricingplan->StartDate);
+                        $planEnd = Carbon::parse($roomTypePlan->pricingplan->EndDate);
+
+                        if ($start >= $planStart->toDateString() && $end <= $planEnd->toDateString()) {
+                            $totalPrice = $roomTypePlan->DailyPrice * $nights;
+                        } else {
+                            switch ($roomTypePlan->pricingplan->ActiveType) {
+                                case 0: // Const
+                                    $totalPrice = $roomTypePlan->roomType->Min_daily_price * $nights;
+                                    break;
+                                case 1: // As Per Day
+                                    $dailyPrices = [];
+                                    for ($date = $startDate->copy(); $date->lt($endDate); $date->addDay()) {
+                                        if ($date->between($planStart, $planEnd)) {
+                                            $dailyPrices[] = $roomTypePlan->DailyPrice;
+                                        } else {
+                                            $dayName = $date->format('l');
+                                            $dailyPrices[] = $this->checkPeakDay($dayName)
+                                                ? $roomTypePlan->roomType->Max_daily_price
+                                                : $roomTypePlan->roomType->Min_daily_price;
+                                        }
+                                    }
+                                    $totalPrice = array_sum($dailyPrices);
+                                    break;
+                                case 2: // Plan Price
+                                    $totalPrice = $roomTypePlan->DailyPrice * $nights;
+                                    break;
+                            }
+                        }
+                    } else {
+                        // Fallback to roomtype
+                        switch ($roomType->active_type) {
+                            case 0:
+                                $totalPrice = $roomType->Min_daily_price * $nights;
+                                break;
+                            case 1:
+                                $dailyPrices = [];
+                                for ($date = $startDate->copy(); $date->lt($endDate); $date->addDay()) {
+                                    $dayName = $date->format('l');
+                                    $dailyPrices[] = $this->checkPeakDay($dayName)
+                                        ? $roomType->Max_daily_price
+                                        : $roomType->Min_daily_price;
+                                }
+                                $totalPrice = array_sum($dailyPrices);
+                                break;
+                            case 2:
+                                $totalPrice = $roomType->Max_daily_price * $nights;
+                                break;
+                        }
+                    }
+                    break;
+
+                case 1: // Pricing plan only (fixed DailyPrice)
+                    if ($roomTypePlan) {
+                        $totalPrice = $roomTypePlan->DailyPrice * $nights;
+                    } else {
+                        throw new \Exception('No pricing plan found for price mode 1');
+                    }
+                    break;
+
+                case 2: // Roomtype only (min/max prices)
+                    switch ($roomType->active_type) {
+                        case 0:
+                            $totalPrice = $roomType->Min_daily_price * $nights;
+                            break;
+                        case 1:
+                            $dailyPrices = [];
+                            for ($date = $startDate->copy(); $date->lt($endDate); $date->addDay()) {
+                                $dayName = $date->format('l');
+                                $dailyPrices[] = $this->checkPeakDay($dayName)
+                                    ? $roomType->Max_daily_price
+                                    : $roomType->Min_daily_price;
+                            }
+                            $totalPrice = array_sum($dailyPrices);
+                            break;
+                        case 2:
+                            $totalPrice = $roomType->Max_daily_price * $nights;
+                            break;
+                    }
+                    break;
+            }
+        }
+        // شهري - similar logic with mode (simplified for now)
+        elseif ($rentType == 1) {
+            $numberOfMonths = $startDate->diffInMonths($endDate);
+            if ($numberOfMonths < 1) $numberOfMonths = 1;
+
+            switch ($priceMode) {
+                case 0: // Current
+                case 1: // Pricing plan
+                    if ($roomTypePlan) {
+                        $totalPrice = $roomTypePlan->MonthlyPrice * $numberOfMonths;
+                    } else {
+                        // fallback
+                        $totalPrice = $roomType->Min_monthly_price * $numberOfMonths;
+                    }
+                    break;
+                case 2: // Roomtype
+                    $totalPrice = $roomType->Min_monthly_price * $numberOfMonths;
+                    break;
+            }
+        }
+
+        return $totalPrice;
+    }
+
     public  function checkReservation(CheckReservationRequest $request)
     {
         try {
-            $availableRooms = array();
-            $roomsQuery = Room::where('building_id', '=', $request->building_id)->where("roomStatus", '=', 1)
-                ->where('active', '=', 1)->where('room_type_id', '=', $request->room_type);
+            $perPage = \returnPerPage();
+            $availableRoomsQuery = Room::where('building_id', '=', $request->building_id)->where("roomStatus", '=', 1)
+                ->where('active', '=', 1);
+            if ($request->filled('room_type')) {
+                $availableRoomsQuery->where('room_type_id', '=', $request->room_type);
+            }
+            if ($request->filled('suite_id')) {
+                $availableRoomsQuery->where('suite_id', '=', $request->suite_id);
+            }
             if ($request->filled('floor_id')) {
-                $roomsQuery->where('floor_id', '=', $request->floor_id)->where('active', '=', 1);
+                $availableRoomsQuery->where('floor_id', '=', $request->floor_id);
             }
-            $rooms = $roomsQuery->get();
-            if (count($rooms) > 0) {
-                foreach ($rooms as $room) {
-                    $checkReservationForRoom = Reservation::where('room_id', '=', $room->id)
-                        ->where('expire_date', '>=', now())
-                        ->where(function ($query) use ($request) {
-                            $query->whereBetween('start_date', [$request->start_date, $request->expire_date])
-                                ->orWhereBetween('expire_date', [$request->start_date, $request->expire_date])
-                                ->orWhere(function ($query) use ($request) {
-                                    $query->where('start_date', '<=', $request->start_date)
-                                        ->where('expire_date', '>=', $request->expire_date);
-                                },);
-                        },)->exists();
-                    switch ($request->type_search) {
-                        case 1: // غرفة فارغة: أول غرفة فارغة ترجع فوراً
-                            if (!$checkReservationForRoom) {
-                                return \SuccessData('Available room found', $room);
-                            }
-                            break;
+            $availableRoomsQuery->whereDoesntHave('reservationRooms.reservation', function ($reservationQuery) use ($request) {
+                $reservationQuery->where('expire_date', '>', $request->start_date)
+                    ->where(function ($q) use ($request) {
+                        $q->where('start_date', '<', $request->expire_date)
+                            ->orWhere('expire_date', '>', $request->start_date)
+                            ->orWhere(function ($q) use ($request) {
+                                $q->where('start_date', '<=', $request->start_date)
+                                    ->where('expire_date', '>=', $request->expire_date);
+                            });
+                    });
+            });
+            //  $availableRooms = AvailableRoomResource::collection($availableRoomsQuery->paginate($perPage));
+             $availableRooms = $availableRoomsQuery->paginate($perPage);
+            return \Pagination($availableRooms);
+            // if (count($rooms) > 0) {
+            //     foreach ($rooms as $room) {
+            //         // البحث في جدول reservation_rooms بدلاً من reservations مباشرة
+            //         $checkReservationForRoom = !$this->isRoomAvailable($room->id, $request->start_date, $request->expire_date);
+            //         switch ($request->type_search) {
+            //             case 1: // غرفة فارغة: أول غرفة فارغة ترجع فوراً
+            //                 if (!$checkReservationForRoom) {
+            //                     return \SuccessData('Available room found', $room);
+            //                 }
+            //                 break;
 
-                        case 2: // جميع الغرف الفارغة
-                            if (!$checkReservationForRoom) {
-                                array_push($availableRooms, $room);
-                            }
-                            break;
-                    }
-                }
-                if (count($availableRooms) > 0) {
-                    return \SuccessData('Available rooms found', $availableRooms);
-                }
-                return \Failed('No available rooms found');
-            } else {
-                return \Failed('Rooms Not Found');
-            }
+            //             case 2: // جميع الغرف الفارغة
+            //                 if (!$checkReservationForRoom) {
+            //                     array_push($availableRooms, $room);
+            //                 }
+            //                 break;
+            //         }
+            //     }
+            //     if (count($availableRooms) > 0) {
+            //         return \SuccessData('Available rooms found', $availableRooms);
+            //     }
+            //     return \Failed('No available rooms found');
+            // } else {
+            //     return \Failed('Rooms Not Found');
+            // }
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }
@@ -319,58 +588,23 @@ class ReservationController extends Controller
     {
         try {
             $query = Reservation::where('start_date', '<=', $request->expire_date)->where('expire_date', '>=', $request->start_date)->where('is_available', '=', 0);
-            $query->whereHas('room', function ($roomQuery) use ($request) {
-                if ($request->building_id) {
+            $query->whereHas('reservationRooms.room', function ($roomQuery) use ($request) {
+                if ($request->has('building_id') && $request->building_id) {
                     $roomQuery->where('building_id', $request->building_id);
                 }
-                if ($request->floor_id) {
+                if ($request->has('floor_id') && $request->floor_id) {
                     $roomQuery->where('floor_id', $request->floor_id);
                 }
-                if ($request->suite_id) {
-                    $roomQuery->where('suite_id', $request->suite_id);
-                }
-                if ($request->room_id) {
-                    $roomQuery->where('id', $request->room_id);
-                }
-            });
+                if ($request->has('suite_id') && $request->suite_id) {
+                    $roomQuery->where('suite_id', $request->suite_id);}
+                    ;});
             $reservations = $query->get();
-            if ($reservations->isEmpty()) {
-                return \Success('No reservations found');
-            } else {
-                return \SuccessData('Reservations found', $reservations);
-            }
-        } catch (\Exception $e) {
-            return \Failed($e->getMessage());
-        }
-    }
-
-    public  function getReservationByRoom(GetReservationByRoomRequest $request)
-    {
-        try {
-            $reservations = Reservation::where('room_id', '=', $request->roomId)
-                ->where('expire_date', '>=', now())->where('is_available', '=', 0)->get();
-            return \SuccessData('Reservations retrieved', $reservations);
+            if ($reservations->isEmpty()) {}
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }
     }
 
 
-    public  function setReservationUnavailable(SetReservationUnavailableRequest $request)
-    {
-        try {
-            Reservation::find($request->id)->update(['is_available' => 1]);
-            return \Success('Reservation set to unavailable');
-        } catch (\Exception $e) {
-            return \Failed($e->getMessage());
-        }
-    }
-
-    public static function checkStudentHasActiveReservation($student_id)
-    {
-        $today = date("Y-m-d");
-        $reservation = Reservation::where('student_id', $student_id)->where('start_date', '<=', $today)->where('expire_date', '>=', $today)->where('is_available', '=', 0)->first();
-        return $reservation;
-    }
 }
 

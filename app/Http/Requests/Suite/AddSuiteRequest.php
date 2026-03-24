@@ -16,14 +16,16 @@ class AddSuiteRequest extends FormRequest
 
     public function rules(): array
     {
+        $buildingId = $this->input('building_id');
+
         return [
             'building_id' => 'required|numeric|exists:buildings,id',
             'floor_id'    => 'required|numeric|exists:floors,id',
             'number'      => [
                 'required',
                 'numeric',
-                Rule::unique('suites', 'number')->where(function ($query) {
-                    return $query->where('building_id', $this->building_id);
+                Rule::unique('suites', 'number')->where(function ($query) use ($buildingId) {
+                    return $query->where('building_id', $buildingId);
                 }),
             ],
             'lock_id'     => 'nullable|string|unique:suites,lock_id',

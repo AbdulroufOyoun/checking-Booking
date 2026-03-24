@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
-use function PHPUnit\Framework\isFalse;
 
 class Room extends Model
 {
@@ -40,6 +39,15 @@ class Room extends Model
 
     function isHasReservation()
     {
-        return Reservation::where('room_id', $this->id)->exists();
+        return ReservationRoom::where('room_id', $this->id)->exists();
+    }
+
+    /**
+     * Get the reservations for this room (from reservation_rooms table)
+     */
+    function reservationRooms()
+    {
+        return $this->hasMany(ReservationRoom::class);
     }
 }
+

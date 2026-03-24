@@ -17,29 +17,39 @@ class MakeReservationRequest extends FormRequest
     {
         return [
             'client_id'             => 'required|numeric',
-            'room_id'               => 'required|numeric|exists:rooms,id',
-            'room_suite'            => 'required|in:0,1',
-            'multi_room'            => 'required|in:0,1',
-            'additional_rooms_ids'  => 'nullable|string',
+            'rooms'                 => 'required|array|min:1',
+'rooms.*.room_id'       => 'nullable|numeric|exists:rooms,id',
+            'rooms.*.suite_id'      => 'nullable|numeric|exists:suites,id',
+            // السعر يحسب تلقائياً من getRoomPrice
             'start_date'            => 'required|date|after_or_equal:today',
-            'nights'                => 'required_if:rent_type,0|integer|min:1',
-            'expire_date'           => 'required|date|after_or_equal:start_date',
+            'expire_date'           => 'required|date|after:start_date',
+            // nights يحسب تلقائياً من start_date و expire_date
+
             'reservation_type'      => 'required|in:0,1',
             'reservation_status'    => 'nullable|in:0,1',
-            'stay_reason_id'        => 'nullable|numeric|exists:stay_reasons,id',
-            'reservation_source_id' => 'nullable|numeric|exists:reservation_sources,id',
+            'stay_reason_id'        => 'required|numeric|exists:stay_reasons,id',
+            'reservation_source_id' => 'required|numeric|exists:reservation_sources,id',
             'rent_type'             => 'required|in:0,1',
-            'base_price'            => 'required|numeric|min:0',
+            'price_calculation_mode' => 'required|in:0,1,2',
+            // هذه الحقول يمكن للمستخدم إرسالها
             'discount'              => 'nullable|numeric|min:0',
             'extras'                => 'nullable|numeric|min:0',
             'penalties'             => 'nullable|numeric|min:0',
-            'subtotal'              => 'required|numeric|min:0',
             'taxes'                 => 'nullable|numeric|min:0',
-            'total'                 => 'required|numeric|min:0',
             'logedin'               => 'nullable|in:0,1',
             'login_time'            => 'nullable|date',
-            'user_id'               => 'required|numeric|exists:users,id',
         ];
+    }
+
+public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            foreach ($this->input('rooms', []) as $index => $roomData) {
+                if (empty($roomData['room_id']) && empty($roomData['suite_id'])) {
+                    $validator->errors()->add('rooms.' . $index, 'Either room_id or suite_id must be provided for each room.');
+                }
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator)

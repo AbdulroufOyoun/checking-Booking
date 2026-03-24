@@ -48,7 +48,7 @@ class SuiteController extends Controller
                 'lock_id' => $request->lock_id ?? null,
             ]);
             if ($suite) {
-                $roomIds = collect($request->rooms)->pluck('id');
+                 $roomIds = collect($request->rooms)->pluck('id');
                 Room::whereIn('id', $roomIds)->update(['suite_id' => $suite->id]);
                 DB::commit();
                 return SuccessData('Suite added Successfully', $suite->load('rooms'));

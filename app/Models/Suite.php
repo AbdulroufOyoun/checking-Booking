@@ -32,4 +32,12 @@ class Suite extends Model
     {
         return $this->belongsTo(Building::class);
     }
+
+    /**
+     * Get the reservations for this suite (from reservation_rooms table)
+     */
+    function reservationRooms()
+    {
+        return $this->hasMany(ReservationRoom::class);
+    }
 }

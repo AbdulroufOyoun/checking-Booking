@@ -16,15 +16,11 @@ class AddRoomtypePricingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'NameAr' => 'required|string|max:255',
-            'NameEn' => 'required|string|max:255',
-            'StartDate' => 'required|date',
-            'EndDate' => 'required|date|after_or_equal:StartDate',
+            'pricingplan_id' => 'required|exists:pricing_plans,id',
             'roomtype_id' => 'required|exists:room_types,id',
             'DailyPrice' => 'required|numeric|min:0',
             'MonthlyPrice' => 'required|numeric|min:0',
             'YearlyPrice' => 'required|numeric|min:0',
-            'ActiveType' => 'required|numeric|in:0,1,2',
         ];
     }
 
