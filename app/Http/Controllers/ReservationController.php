@@ -16,8 +16,9 @@ use App\Http\Requests\Reservation\MakeReservationRequest;
 use App\Http\Requests\Reservation\CheckReservationRequest;
 use App\Http\Requests\Reservation\GetRoomPriceRequest;
 use App\Http\Requests\Reservation\GetReservationByDateRequest;
-use Illuminate\Support\Facades\Log;
-use App\Http\Resources\Room\AvailableRoomResource;
+use App\Models\RoomPrice;
+use App\Models\RoomPriceMaxDay;
+
 class ReservationController extends Controller
 {
     public function makeReservation(MakeReservationRequest $request)
@@ -125,10 +126,11 @@ class ReservationController extends Controller
             }
             $extras = $request->extras ?? 0;
             $penalties = $request->penalties ?? 0;
-            $taxes = $request->taxes ?? 0;
 
-            $subtotal = $totalBasePrice;
-            $total = $totalBasePrice - $discount + $extras + $penalties + $taxes;
+             $subtotal = $totalBasePrice - $discount + $extras + $penalties;
+            $taxes = $subtotal *15/100;
+
+             $total = $subtotal + $taxes;
 
             $reservation = Reservation::create([
                 'client_id'          => $request->client_id,
@@ -153,12 +155,39 @@ class ReservationController extends Controller
             ]);
 
             foreach ($roomsData as $roomData) {
-                ReservationRoom::create([
+                $reservationRoom = ReservationRoom::create([
                     'reservation_id' => $reservation->id,
                     'room_id'        => $roomData['room_id'],
                     'suite_id'       => $roomData['suite_id'],
                     'price'          => $roomData['price'],
                 ]);
+
+                // Create room_price for this reservation_room
+                $room = Room::find($roomData['room_id']);
+                $roomType = $room->roomType;
+                $roomTypePlan = $roomType ? RoomtypePricingplan::where('roomtype_id', $room->room_type_id)->first() : null;
+                $pricingPlanId = $roomTypePlan ? $roomTypePlan->pricingplan_id : null;
+
+                $roomPriceData = [
+                    'reservation_room_id' => $reservationRoom->id,
+                    'pricing_plan_daily' => $roomTypePlan ? $roomTypePlan->DailyPrice : ($roomType ? $roomType->Min_daily_price : 0),
+                    'pricing_plan_monthly' => $roomTypePlan ? $roomTypePlan->MonthlyPrice : ($roomType ? $roomType->Min_monthly_price : 0),
+                    'daily_price' => $roomTypePlan ? $roomTypePlan->DailyPrice : ($roomType ? $roomType->Min_daily_price : 0),
+                    'monthly_price' => $roomTypePlan ? $roomTypePlan->MonthlyPrice : ($roomType ? $roomType->Min_monthly_price : 0),
+                    'max_price' => $roomType ? $roomType->Max_daily_price : 0,
+                    'min_price' => $roomType ? $roomType->Min_daily_price : 0,
+                ];
+
+                $roomPrice = RoomPrice::create($roomPriceData);
+
+                // Create room_price_max_days for days 1-7 with monthly_price
+                for ($day = 1; $day <= 7; $day++) {
+                    RoomPriceMaxDay::create([
+                        'room_price_id' => $roomPrice->id,
+                        'day' => $day,
+                        'monthly_price' => $roomPriceData['monthly_price'],
+                    ]);
+                }
             }
 
             DB::commit();
@@ -348,31 +377,6 @@ class ReservationController extends Controller
             //  $availableRooms = AvailableRoomResource::collection($availableRoomsQuery->paginate($perPage));
              $availableRooms = $availableRoomsQuery->paginate($perPage);
             return \Pagination($availableRooms);
-            // if (count($rooms) > 0) {
-            //     foreach ($rooms as $room) {
-            //         // البحث في جدول reservation_rooms بدلاً من reservations مباشرة
-            //         $checkReservationForRoom = !$this->isRoomAvailable($room->id, $request->start_date, $request->expire_date);
-            //         switch ($request->type_search) {
-            //             case 1: // غرفة فارغة: أول غرفة فارغة ترجع فوراً
-            //                 if (!$checkReservationForRoom) {
-            //                     return \SuccessData('Available room found', $room);
-            //                 }
-            //                 break;
-
-            //             case 2: // جميع الغرف الفارغة
-            //                 if (!$checkReservationForRoom) {
-            //                     array_push($availableRooms, $room);
-            //                 }
-            //                 break;
-            //         }
-            //     }
-            //     if (count($availableRooms) > 0) {
-            //         return \SuccessData('Available rooms found', $availableRooms);
-            //     }
-            //     return \Failed('No available rooms found');
-            // } else {
-            //     return \Failed('Rooms Not Found');
-            // }
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }

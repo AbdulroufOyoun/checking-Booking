@@ -18,7 +18,7 @@ class MakeReservationRequest extends FormRequest
         return [
             'client_id'             => 'required|numeric',
             'rooms'                 => 'required|array|min:1',
-'rooms.*.room_id'       => 'nullable|numeric|exists:rooms,id',
+            'rooms.*.room_id'       => 'nullable|numeric|exists:rooms,id',
             'rooms.*.suite_id'      => 'nullable|numeric|exists:suites,id',
             // السعر يحسب تلقائياً من getRoomPrice
             'start_date'            => 'required|date|after_or_equal:today',
@@ -35,7 +35,7 @@ class MakeReservationRequest extends FormRequest
             'discount'              => 'nullable|numeric|min:0',
             'extras'                => 'nullable|numeric|min:0',
             'penalties'             => 'nullable|numeric|min:0',
-            'taxes'                 => 'nullable|numeric|min:0',
+            // 'taxes'                 => 'nullable|numeric|min:0',
             'logedin'               => 'nullable|in:0,1',
             'login_time'            => 'nullable|date',
         ];

@@ -25,12 +25,14 @@ use App\Http\Controllers\GuestClassificationFeaturesController;
 use App\Http\Controllers\ClientClassificationsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\UsersController;
+use App\Http\Controllers\EarningController;
 
 
 Route::post('login', [UsersController::class, 'login']);
 // Route::middleware(['can_do:manage_settings'])->group(function () {
 // });
-// Building
+Route::get('login_error',[UsersController::class , 'loginError'])->name('login');
+
 Route::group(['middleware' => ['auth:api']], function () {
 //=========================================Buildings=============================================
 //Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
@@ -189,9 +191,12 @@ Route::delete('removeClientClassification', [ClientClassificationsController::cl
 Route::post('makeReservation', [ReservationController::class, 'makeReservation']);
 Route::get('checkReservation', [ReservationController::class, 'checkReservation']);
 Route::post('getRoomPrice', [ReservationController::class, 'getRoomPrice']);
-// Route::get('getReservation', [ReservationController::class, 'getReservation']);
-// Route::post('getReservationByStudent', [ReservationController::class, 'getReservationByStudent']);
-// Route::post('setReservationUnavailable', [ReservationController::class, 'setReservationUnavailable']);
-// Route::post('getReservationByRoom', [ReservationController::class, 'getReservationByRoom']);
+
+Route::get('room-earnings/{entity_id}', [EarningController::class, 'getRoomEarnings']);
+Route::get('suite-earnings/{entity_id}', [EarningController::class, 'getSuiteEarnings']);
+Route::get('floor-earnings/{entity_id}', [EarningController::class, 'getFloorEarnings']);
+Route::get('building-earnings/{entity_id}', [EarningController::class, 'getBuildingEarnings']);
+Route::get('roomtype-earnings', [EarningController::class, 'getRoomTypeEarnings']);
+Route::get('yearly-earnings', [EarningController::class, 'getYearlyEarnings']);
 });
-Route::get('login_error',[UsersController::class , 'loginError'])->name('login');
+
