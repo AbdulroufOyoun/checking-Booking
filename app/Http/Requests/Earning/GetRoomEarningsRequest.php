@@ -15,11 +15,11 @@ class GetRoomEarningsRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
-            'entity_id' => 'required|integer|min:1',
-            'start_date' => 'required|date_format:Y-m-d',
-'compare_start_date' => 'nullable|date_format:Y-m-d',
-            'compare_end_date' => 'nullable|date_format:Y-m-d|after_or_equal:compare_start_date',
+        return [     'entity_id' => 'required|integer|min:1',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'compare_start_date' => 'nullable|date',
+            'compare_end_date' => 'nullable|date|after_or_equal:compare_start_date',
         ];
     }
 

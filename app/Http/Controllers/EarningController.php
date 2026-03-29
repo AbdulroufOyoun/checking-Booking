@@ -25,80 +25,80 @@ use App\Models\Reservation;
 
 class EarningController extends Controller
 {
-    public function getRevenue(\App\Http\Requests\Earning\GetRevenueRequest $request)
-    {
-        $validated = $request->validated();
+    // public function getRevenue(\App\Http\Requests\Earning\GetRevenueRequest $request)
+    // {
+    //     $validated = $request->validated();
 
-        $scope = $validated['scope'];
-        $entityId = $validated['entity_id'] ?? null;
-        $startDate = Carbon::parse($validated['start_date']);
-        $endDate = Carbon::parse($validated['end_date']);
+    //     $scope = $validated['scope'];
+    //     $entityId = $validated['entity_id'] ?? null;
+    //     $startDate = Carbon::parse($validated['start_date']);
+    //     $endDate = Carbon::parse($validated['end_date']);
 
-        $compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validated['compare_start_date']) : null;
-        $compareEnd = isset($validated['compare_end_date']) ? Carbon::parse($validated['compare_end_date']) : null;
+    //     $compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validated['compare_start_date']) : null;
+    //     $compareEnd = isset($validated['compare_end_date']) ? Carbon::parse($validated['compare_end_date']) : null;
 
-        $data = $this->calculateRevenue($scope, $entityId, $startDate, $endDate, $compareStart, $compareEnd);
+    //     $data = $this->calculateRevenue($scope, $entityId, $startDate, $endDate, $compareStart, $compareEnd);
 
-        return response()->json([
-            'scope' => $scope,
-            'entity_id' => $entityId,
-            'period' => [
-                'start' => $startDate->format('Y-m-d'),
-                'end' => $endDate->format('Y-m-d'),
-                'days' => $endDate->diffInDays($startDate) + 1,
-            ],
-            'revenue' => $data
-        ]);
-    }
+    //     return response()->json([
+    //         'scope' => $scope,
+    //         'entity_id' => $entityId,
+    //         'period' => [
+    //             'start' => $startDate->format('Y-m-d'),
+    //             'end' => $endDate->format('Y-m-d'),
+    //             'days' => $endDate->diffInDays($startDate) + 1,
+    //         ],
+    //         'revenue' => $data
+    //     ]);
+    // }
 
-    private function calculateRevenue($scope, $entityId, $startDate, $endDate, $compareStart = null, $compareEnd = null)
-    {
-        $query = Reservation::where('start_date', '<=', $endDate)
-            ->where('expire_date', '>=', $startDate)
-            ->where('reservation_status', 1);
+    // private function calculateRevenue($scope, $entityId, $startDate, $endDate, $compareStart = null, $compareEnd = null)
+    // {
+    //     $query = Reservation::where('start_date', '<=', $endDate)
+    //         ->where('expire_date', '>=', $startDate)
+    //         ->where('reservation_status', 1);
 
-        if ($scope !== 'total') {
-            $query->whereHas('reservationRooms.' . $scope, function ($q) use ($entityId) {
-                $q->where('id', $entityId);
-            });
-        }
+    //     if ($scope !== 'total') {
+    //         $query->whereHas('reservationRooms.' . $scope, function ($q) use ($entityId) {
+    //             $q->where('id', $entityId);
+    //         });
+    //     }
 
-        $current = $query->clone()->selectRaw('SUM(total) as total, SUM(base_price) as base_price, SUM(discount) as discount, COUNT(*) as count')
-            ->first();
+    //     $current = $query->clone()->selectRaw('SUM(total) as total, SUM(base_price) as base_price, SUM(discount) as discount, COUNT(*) as count')
+    //         ->first();
 
-        $comparison = null;
-        if ($compareStart && $compareEnd) {
-            $comparisonQuery = Reservation::where('start_date', '<=', $compareEnd)
-                ->where('expire_date', '>=', $compareStart)
-                ->where('reservation_status', 1);
+    //     $comparison = null;
+    //     if ($compareStart && $compareEnd) {
+    //         $comparisonQuery = Reservation::where('start_date', '<=', $compareEnd)
+    //             ->where('expire_date', '>=', $compareStart)
+    //             ->where('reservation_status', 1);
 
-            if ($scope !== 'total') {
-                $comparisonQuery->whereHas('reservationRooms.' . $scope, function ($q) use ($entityId) {
-                    $q->where('id', $entityId);
-                });
-            }
+    //         if ($scope !== 'total') {
+    //             $comparisonQuery->whereHas('reservationRooms.' . $scope, function ($q) use ($entityId) {
+    //                 $q->where('id', $entityId);
+    //             });
+    //         }
 
-            $comparison = $comparisonQuery->selectRaw('SUM(total) as total, SUM(base_price) as base_price, SUM(discount) as discount, COUNT(*) as count')
-                ->first();
-        }
+    //         $comparison = $comparisonQuery->selectRaw('SUM(total) as total, SUM(base_price) as base_price, SUM(discount) as discount, COUNT(*) as count')
+    //             ->first();
+    //     }
 
-        return [
-            'current' => [
-                'total' => (float) ($current->total ?? 0),
-                'base_price' => (float) ($current->base_price ?? 0),
-                'discount' => (float) ($current->discount ?? 0),
-                'net' => (float) (($current->total ?? 0) - ($current->discount ?? 0)),
-                'count' => (int) ($current->count ?? 0),
-            ],
-            'comparison' => $comparison ? [
-                'total' => (float) ($comparison->total ?? 0),
-                'base_price' => (float) ($comparison->base_price ?? 0),
-                'discount' => (float) ($comparison->discount ?? 0),
-                'net' => (float) (($comparison->total ?? 0) - ($comparison->discount ?? 0)),
-                'count' => (int) ($comparison->count ?? 0),
-            ] : null,
-        ];
-    }
+    //     return [
+    //         'current' => [
+    //             'total' => (float) ($current->total ?? 0),
+    //             'base_price' => (float) ($current->base_price ?? 0),
+    //             'discount' => (float) ($current->discount ?? 0),
+    //             'net' => (float) (($current->total ?? 0) - ($current->discount ?? 0)),
+    //             'count' => (int) ($current->count ?? 0),
+    //         ],
+    //         'comparison' => $comparison ? [
+    //             'total' => (float) ($comparison->total ?? 0),
+    //             'base_price' => (float) ($comparison->base_price ?? 0),
+    //             'discount' => (float) ($comparison->discount ?? 0),
+    //             'net' => (float) (($comparison->total ?? 0) - ($comparison->discount ?? 0)),
+    //             'count' => (int) ($comparison->count ?? 0),
+    //         ] : null,
+    //     ];
+    // }
 
 
 
@@ -148,6 +148,35 @@ $compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validat
 
         return response()->json([
             'scope' => 'suite',
+            'entity_id' => $entityId,
+            'period' => [
+                'start' => $startDate->format('Y-m-d'),
+                'end' => $endDate->format('Y-m-d'),
+                'days' => $endDate->diffInDays($startDate) + 1,
+            ],
+            'earnings' => $data
+        ]);
+    }
+
+    public function getRoomEarnings(GetRoomEarningsRequest $request)
+    {
+        $validated = $request->validated();
+
+        $entityId = $validated['entity_id'];
+        $startDate = Carbon::parse($validated['start_date']);
+        $endDate = Carbon::parse($validated['end_date']);
+
+        if (!Room::find($entityId)) {
+            return response()->json(['error' => 'Room not found'], 404);
+        }
+
+        $compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validated['compare_start_date']) : null;
+        $compareEnd = isset($validated['compare_end_date']) ? Carbon::parse($validated['compare_end_date']) : null;
+
+        $data = $this->calculateEarnings('room', $entityId, $startDate, $endDate, $compareStart, $compareEnd);
+
+        return response()->json([
+            'scope' => 'room',
             'entity_id' => $entityId,
             'period' => [
                 'start' => $startDate->format('Y-m-d'),
