@@ -9,6 +9,9 @@ use App\Http\Controllers\ReservationController;
 Route::post('makeReservation', [ReservationController::class, 'makeReservation']);
 Route::post('checkReservation', [ReservationController::class, 'checkReservation']);
 Route::post('getRoomPrice', [ReservationController::class, 'getRoomPrice']);
+
+// Refund Policies
+
 // Route::get('getReservation', [Reservations::class, 'getReservation']);
 // Route::post('getReservationByStudent', [Reservations::class, 'getReservationByStudent']);
 // Route::post('setReservationUnavailable', [Reservations::class, 'setReservationUnavailable']);

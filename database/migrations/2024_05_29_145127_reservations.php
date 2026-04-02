@@ -22,7 +22,7 @@ return new class extends Migration {
             $table->integer('nights')->default(1)->comment('the reservation nights');
             $table->date('expire_date')->comment('the reservation expire date');
             $table->tinyInteger("reservation_type")->default(0)->in_array([0, 1])->comment("0=> Single 1=> collective");
-            $table->tinyInteger("reservation_status")->default(0)->in_array([0, 1])->comment("0=> Confirmed 1=> Unconfirmed");
+            $table->tinyInteger("reservation_status")->default(0)->in_array([0, 1])->comment("0=> Unconfirmed 1=> Confirmed");
             $table->integer('stay_reason_id');
             $table->integer('reservation_source_id');
             $table->tinyInteger("rent_type")->default(0)->in_array([0, 1, 2])->comment("0=>daily 1=>monthly 2=>annual");

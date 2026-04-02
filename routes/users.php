@@ -26,7 +26,8 @@ use App\Http\Controllers\ClientClassificationsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\EarningController;
-
+use App\Http\Controllers\RevenueController;
+use App\Http\Controllers\RefundPolicyController;
 
 Route::post('login', [UsersController::class, 'login']);
 // Route::middleware(['can_do:manage_settings'])->group(function () {
@@ -192,11 +193,26 @@ Route::post('makeReservation', [ReservationController::class, 'makeReservation']
 Route::get('checkReservation', [ReservationController::class, 'checkReservation']);
 Route::post('getRoomPrice', [ReservationController::class, 'getRoomPrice']);
 
-Route::get('room-earnings/{entity_id}', [EarningController::class, 'getRoomEarnings']);
-Route::get('suite-earnings/{entity_id}', [EarningController::class, 'getSuiteEarnings']);
-Route::get('floor-earnings/{entity_id}', [EarningController::class, 'getFloorEarnings']);
-Route::get('building-earnings/{entity_id}', [EarningController::class, 'getBuildingEarnings']);
-Route::get('roomtype-earnings', [EarningController::class, 'getRoomTypeEarnings']);
-Route::get('yearly-earnings', [EarningController::class, 'getYearlyEarnings']);
-});
+Route::get('all-earnings', [EarningController::class, 'allEarnings']);
+Route::get('earnings-list', [EarningController::class, 'earningsList']);
+Route::get('earnings-summary', [EarningController::class, 'earningsSummary']);
+Route::get('payments', [EarningController::class, 'payments']);
+Route::get('refunds', [EarningController::class, 'refunds']);
+
+// Revenue APIs
+Route::get('revenue/total', [RevenueController::class, 'getTotalRevenue']);
+Route::get('revenue/room/{entity_id}', [RevenueController::class, 'getRoomRevenue']);
+Route::get('revenue/suite/{entity_id}', [RevenueController::class, 'getSuiteRevenue']);
+Route::get('revenue/floor/{entity_id}', [RevenueController::class, 'getFloorRevenue']);
+Route::get('revenue/building/{entity_id}', [RevenueController::class, 'getBuildingRevenue']);
+Route::get('revenue/roomtype/{entity_id}', [RevenueController::class, 'getRoomTypeRevenue']);
+
+Route::apiResource('refund-policies', RefundPolicyController::class);
+Route::delete('refund-policies', [RefundPolicyController::class, 'destroy']);
+
+
+    });
+
+
+
 

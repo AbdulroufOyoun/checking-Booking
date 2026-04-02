@@ -2,384 +2,136 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Http\Requests\Earning\GetSuiteEarningsRequest;
-use App\Http\Requests\Earning\GetRoomTypeEarningsRequest;
-use App\Http\Requests\Earning\GetRoomEarningsRequest;
-use App\Http\Requests\Earning\GetFloorEarningsRequest;
-use App\Http\Requests\Earning\GetEarningsRequest;
-use App\Http\Requests\Earning\GetRevenueRequest;
-use App\Models\ReservationRoom;
-use App\Models\Building;
-use App\Models\Floor;
-use App\Models\Suite;
-use App\Models\RoomType;
-use App\Models\Room;
+use App\Http\Requests\Earning\AllEarningsRequest;
+use App\Http\Requests\Earning\EarningsListRequest;
+use App\Http\Requests\Earning\EarningsSummaryRequest;
 use Illuminate\Support\Facades\DB;
+use App\Models\ReservationPay;
 use Carbon\Carbon;
-use App\Http\Requests\Earning\GetYearlyEarningsRequest;
-use App\Models\Reservation;
-
-
-
 
 class EarningController extends Controller
 {
-    // public function getRevenue(\App\Http\Requests\Earning\GetRevenueRequest $request)
-    // {
-    //     $validated = $request->validated();
-
-    //     $scope = $validated['scope'];
-    //     $entityId = $validated['entity_id'] ?? null;
-    //     $startDate = Carbon::parse($validated['start_date']);
-    //     $endDate = Carbon::parse($validated['end_date']);
-
-    //     $compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validated['compare_start_date']) : null;
-    //     $compareEnd = isset($validated['compare_end_date']) ? Carbon::parse($validated['compare_end_date']) : null;
-
-    //     $data = $this->calculateRevenue($scope, $entityId, $startDate, $endDate, $compareStart, $compareEnd);
-
-    //     return response()->json([
-    //         'scope' => $scope,
-    //         'entity_id' => $entityId,
-    //         'period' => [
-    //             'start' => $startDate->format('Y-m-d'),
-    //             'end' => $endDate->format('Y-m-d'),
-    //             'days' => $endDate->diffInDays($startDate) + 1,
-    //         ],
-    //         'revenue' => $data
-    //     ]);
-    // }
-
-    // private function calculateRevenue($scope, $entityId, $startDate, $endDate, $compareStart = null, $compareEnd = null)
-    // {
-    //     $query = Reservation::where('start_date', '<=', $endDate)
-    //         ->where('expire_date', '>=', $startDate)
-    //         ->where('reservation_status', 1);
-
-    //     if ($scope !== 'total') {
-    //         $query->whereHas('reservationRooms.' . $scope, function ($q) use ($entityId) {
-    //             $q->where('id', $entityId);
-    //         });
-    //     }
-
-    //     $current = $query->clone()->selectRaw('SUM(total) as total, SUM(base_price) as base_price, SUM(discount) as discount, COUNT(*) as count')
-    //         ->first();
-
-    //     $comparison = null;
-    //     if ($compareStart && $compareEnd) {
-    //         $comparisonQuery = Reservation::where('start_date', '<=', $compareEnd)
-    //             ->where('expire_date', '>=', $compareStart)
-    //             ->where('reservation_status', 1);
-
-    //         if ($scope !== 'total') {
-    //             $comparisonQuery->whereHas('reservationRooms.' . $scope, function ($q) use ($entityId) {
-    //                 $q->where('id', $entityId);
-    //             });
-    //         }
-
-    //         $comparison = $comparisonQuery->selectRaw('SUM(total) as total, SUM(base_price) as base_price, SUM(discount) as discount, COUNT(*) as count')
-    //             ->first();
-    //     }
-
-    //     return [
-    //         'current' => [
-    //             'total' => (float) ($current->total ?? 0),
-    //             'base_price' => (float) ($current->base_price ?? 0),
-    //             'discount' => (float) ($current->discount ?? 0),
-    //             'net' => (float) (($current->total ?? 0) - ($current->discount ?? 0)),
-    //             'count' => (int) ($current->count ?? 0),
-    //         ],
-    //         'comparison' => $comparison ? [
-    //             'total' => (float) ($comparison->total ?? 0),
-    //             'base_price' => (float) ($comparison->base_price ?? 0),
-    //             'discount' => (float) ($comparison->discount ?? 0),
-    //             'net' => (float) (($comparison->total ?? 0) - ($comparison->discount ?? 0)),
-    //             'count' => (int) ($comparison->count ?? 0),
-    //         ] : null,
-    //     ];
-    // }
-
-
-
-
-    public function getRoomTypeEarnings(GetRoomTypeEarningsRequest $request)
+    /**
+     * API 1: Summary of all earnings (in/out totals, counts, rows) from date to date with comparison
+     */
+    public function allEarnings(AllEarningsRequest $request)
     {
-        $validated = $request->validated();
+        $startDate = Carbon::parse($request->start_date);
+        $endDate = Carbon::parse($request->end_date);
 
-        $entityId = $validated['entity_id'];
-        $startDate = Carbon::parse($validated['start_date']);
-        $endDate = Carbon::parse($validated['end_date']);
-
-        if (!RoomType::find($entityId)) {
-            return response()->json(['error' => 'Room Type not found'], 404);
-        }
-
-$compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validated['compare_start_date']) : null;
-        $compareEnd = isset($validated['compare_end_date']) ? Carbon::parse($validated['compare_end_date']) : null;
-
-        $data = $this->calculateEarnings('roomtype', $entityId, $startDate, $endDate, $compareStart, $compareEnd);
-
-        return response()->json([
-            'scope' => 'roomtype',
-            'entity_id' => $entityId,
-            'period' => [
-                'start' => $startDate->format('Y-m-d'),
-                'end' => $endDate->format('Y-m-d'),
-                'days' => $endDate->diffInDays($startDate) + 1,
-            ],
-            'earnings' => $data
-        ]);
-    }
-
-    public function getSuiteEarnings(GetSuiteEarningsRequest $request)
-    {
-        $validated = $request->validated();
-
-        $entityId = $validated['entity_id'];
-        $startDate = Carbon::parse($validated['start_date']);
-        $endDate = Carbon::parse($validated['end_date']);
-
-        if (!Suite::find($entityId)) {
-            return response()->json(['error' => 'Suite not found'], 404);
-        }
-
-        $data = $this->calculateEarnings('suite', $entityId, $startDate, $endDate, null, null);
-
-        return response()->json([
-            'scope' => 'suite',
-            'entity_id' => $entityId,
-            'period' => [
-                'start' => $startDate->format('Y-m-d'),
-                'end' => $endDate->format('Y-m-d'),
-                'days' => $endDate->diffInDays($startDate) + 1,
-            ],
-            'earnings' => $data
-        ]);
-    }
-
-    public function getRoomEarnings(GetRoomEarningsRequest $request)
-    {
-        $validated = $request->validated();
-
-        $entityId = $validated['entity_id'];
-        $startDate = Carbon::parse($validated['start_date']);
-        $endDate = Carbon::parse($validated['end_date']);
-
-        if (!Room::find($entityId)) {
-            return response()->json(['error' => 'Room not found'], 404);
-        }
-
-        $compareStart = isset($validated['compare_start_date']) ? Carbon::parse($validated['compare_start_date']) : null;
-        $compareEnd = isset($validated['compare_end_date']) ? Carbon::parse($validated['compare_end_date']) : null;
-
-        $data = $this->calculateEarnings('room', $entityId, $startDate, $endDate, $compareStart, $compareEnd);
-
-        return response()->json([
-            'scope' => 'room',
-            'entity_id' => $entityId,
-            'period' => [
-                'start' => $startDate->format('Y-m-d'),
-                'end' => $endDate->format('Y-m-d'),
-                'days' => $endDate->diffInDays($startDate) + 1,
-            ],
-            'earnings' => $data
-        ]);
-    }
-
-    public function getFloorEarnings(GetFloorEarningsRequest $request)
-    {
-        $validated = $request->validated();
-
-        $entityId = $validated['entity_id'];
-        $startDate = Carbon::parse($validated['start_date']);
-        $endDate = Carbon::parse($validated['end_date']);
-
-        if (!Floor::find($entityId)) {
-            return response()->json(['error' => 'Floor not found'], 404);
-        }
-
-        $data = $this->calculateEarnings('floor', $entityId, $startDate, $endDate, null, null);
-
-        return response()->json([
-            'scope' => 'floor',
-            'entity_id' => $entityId,
-            'period' => [
-                'start' => $startDate->format('Y-m-d'),
-                'end' => $endDate->format('Y-m-d'),
-                'days' => $endDate->diffInDays($startDate) + 1,
-            ],
-            'earnings' => $data
-        ]);
-    }
-
-    public function getBuildingEarnings(Request $request)
-    {
-        $request->merge(['scope' => 'building']);
-        $validated = app(GetEarningsRequest::class)->new($request)->validateResolved();
-
-        $entityId = $validated['entity_id'];
-        $startDate = Carbon::parse($validated['start_date']);
-        $endDate = Carbon::parse($validated['end_date']);
-
-        if (!Building::find($entityId)) {
-            return response()->json(['error' => 'Building not found'], 404);
-        }
-
-        $data = $this->calculateEarnings('building', $entityId, $startDate, $endDate, null, null);
-
-        return response()->json([
-            'scope' => 'building',
-            'entity_id' => $entityId,
-            'period' => [
-                'start' => $startDate->format('Y-m-d'),
-                'end' => $endDate->format('Y-m-d'),
-                'days' => $endDate->diffInDays($startDate) + 1,
-            ],
-            'earnings' => $data
-        ]);
-    }
-
-    public function getYearlyEarnings(Request $request)
-    {
-$validated = (new GetYearlyEarningsRequest())->merge($request->all())->validate();
-        $years = $validated['years'];
-
-        // Month names
-        $monthNames = [
-            1 => ['en' => 'January', 'ar' => 'يناير'],
-            2 => ['en' => 'February', 'ar' => 'فبراير'],
-            3 => ['en' => 'March', 'ar' => 'مارس'],
-            4 => ['en' => 'April', 'ar' => 'أبريل'],
-            5 => ['en' => 'May', 'ar' => 'مايو'],
-            6 => ['en' => 'June', 'ar' => 'يونيو'],
-            7 => ['en' => 'July', 'ar' => 'يوليو'],
-            8 => ['en' => 'August', 'ar' => 'أغسطس'],
-            9 => ['en' => 'September', 'ar' => 'سبتمبر'],
-            10 => ['en' => 'October', 'ar' => 'أكتوبر'],
-            11 => ['en' => 'November', 'ar' => 'نوفمبر'],
-            12 => ['en' => 'December', 'ar' => 'ديسمبر'],
-        ];
-
-        // Grand total yearly
-        $query = ReservationRoom::query()
-            ->join('reservations', 'reservation_rooms.reservation_id', '=', 'reservations.id')
-            ->join('rooms', 'reservation_rooms.room_id', '=', 'rooms.id')
-            ->whereIn(DB::raw('YEAR(reservations.start_date)'), $years)
-            ->where('reservations.reservation_status', 1)
-            ->where('reservations.reservation_status', '!=', 'cancelled');
-
-        $grandYearly = $query->select(
-            DB::raw('SUM(reservations.total) as total'),
-            DB::raw('SUM(reservations.discount) as discount'),
-            DB::raw('COUNT(DISTINCT reservations.id) as count')
-        )->first();
-
-        $totalYearly = [
-            'net_earnings' => (float) ($grandYearly->total ?? 0) - (float) ($grandYearly->discount ?? 0),
-            'total' => (float) ($grandYearly->total ?? 0),
-            'count' => (int) ($grandYearly->count ?? 0),
-        ];
-
-        // Grand total monthly (across years)
-        $grandMonthly = $query->select(
-            DB::raw('MONTH(reservations.start_date) as month'),
-            DB::raw('SUM(reservations.total) as total'),
-            DB::raw('SUM(reservations.discount) as discount'),
-            DB::raw('COUNT(DISTINCT reservations.id) as count')
-        )->groupBy('month')
-        ->get()
-        ->keyBy('month');
-
-        $totalMonthly = [];
-        for ($m = 1; $m <= 12; $m++) {
-            $monthData = $grandMonthly->get($m, (object)['total' => 0, 'discount' => 0, 'count' => 0]);
-            $totalMonthly[] = [
-                'month' => $m,
-                'name_ar' => $monthNames[$m]['ar'],
-                'name_en' => $monthNames[$m]['en'],
-                'net_earnings' => (float) $monthData->total - (float) $monthData->discount,
-                'total' => (float) $monthData->total,
-                'count' => (int) $monthData->count,
-            ];
-        }
-
-        // Per building
-        $query->join('buildings', 'rooms.building_id', '=', 'buildings.id');
-        $buildingsData = $query->select(
-            'buildings.id',
-            'buildings.name as name_ar',
-'buildings.name as name_en', // use name as en too
-            DB::raw('SUM(reservations.total) as total'),
-            DB::raw('SUM(reservations.discount) as discount'),
-            DB::raw('COUNT(DISTINCT reservations.id) as count')
-        )->groupBy('buildings.id', 'buildings.name')
-        ->havingRaw('SUM(reservations.total) > 0')
-        ->get();
-
-        $buildings = [];
-        foreach ($buildingsData as $b) {
-            $b->net_earnings = (float) $b->total - (float) $b->discount;
-            $buildings[] = $b;
-        }
-
-        return response()->json([
-            'years' => $years,
-            'total_yearly' => $totalYearly,
-            'total_monthly' => $totalMonthly,
-            'buildings' => $buildings,
-        ]);
-    }
-
-    private function getEarningsForPeriod(Carbon $startDate, Carbon $endDate)
-    {
-        $totals = DB::table('reservations')
-            ->where('start_date', '>=', $startDate)
-            ->where('start_date', '<=', $endDate)
-            ->where('reservation_status', 1)
-            ->select(
-                DB::raw('SUM(total) as total'),
-                DB::raw('SUM(subtotal) as subtotal'),
-                DB::raw('SUM(taxes) as taxes'),
-                DB::raw('SUM(penalties) as penalties'),
-                DB::raw('SUM(discount) as discount'),
-                DB::raw('SUM(base_price) as base_price'),
-                DB::raw('SUM(extras) as extras'),
-                DB::raw('COUNT(id) as reservation_count'),
-                DB::raw('SUM(nights) as total_nights')
-            )->first();
-
-        return [
-            'total'             => (float) ($totals->total ?? 0),
-            'subtotal'          => (float) ($totals->subtotal ?? 0),
-            'taxes'             => (float) ($totals->taxes ?? 0),
-            'penalties'         => (float) ($totals->penalties ?? 0),
-            'discount'          => (float) ($totals->discount ?? 0),
-            'base_price'        => (float) ($totals->base_price ?? 0),
-            'extras'            => (float) ($totals->extras ?? 0),
-            'net_earnings'      => (float) ($totals->total ?? 0) - (float) ($totals->discount ?? 0),
-            'reservation_count' => (int) ($totals->reservation_count ?? 0),
-            'total_nights'      => (int) ($totals->total_nights ?? 0),
-            'avg_nightly'       => ($totals->total_nights ?? 0) > 0
-                                   ? (float) ($totals->total / $totals->total_nights)
-                                   : 0.0,
-        ];
-    }
-
-    private function calculateEarnings(string $scope, int $entityId, Carbon $startDate, Carbon $endDate, ?Carbon $compareStart = null, ?Carbon $compareEnd = null)
-    {
-        $current = $this->getEarningsForPeriod($startDate, $endDate);
+        $current = $this->getEarningsSummary($startDate, $endDate);
 
         $comparison = null;
-        if ($compareStart && $compareEnd) {
-
-            $comparison = $this->getEarningsForPeriod($compareStart, $compareEnd);
+        if ($request->filled('compare_start_date') && $request->filled('compare_end_date')) {
+            $compStart = Carbon::parse($request->compare_start_date);
+            $compEnd = Carbon::parse($request->compare_end_date);
+            $comparison = $this->getEarningsSummary($compStart, $compEnd);
         }
 
-        return [
+        return SuccessData('Earnings data retrieved successfully', [
+            'period' => [
+                'start_date' => $startDate->format('Y-m-d'),
+                'end_date' => $endDate->format('Y-m-d'),
+            ],
             'current' => $current,
             'comparison' => $comparison,
+        ]);
+    }
+
+    /**
+     * API 2: Paginated earnings list (all/payments/refunds) from date to date
+     */
+    public function earningsList(EarningsListRequest $request)
+    {
+        $query = ReservationPay::select('reservation_pay.*', 'reservations.start_date as res_start', 'reservations.client_id')
+            ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1);
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = Carbon::parse($request->start_date);
+            $endDate = Carbon::parse($request->end_date);
+            $query->whereBetween('reservations.start_date', [$startDate, $endDate]);
+        }
+
+        if ($request->type === 'in') {
+            $query->where('reservation_pay.type', ReservationPay::TYPE_PAYMENT);
+        } elseif ($request->type === 'out') {
+            $query->where('reservation_pay.type', ReservationPay::TYPE_REFUND);
+        }
+
+        $query->orderBy('reservation_pay.created_at', 'desc');
+
+        $perPage = $request->get('per_page', 15);
+        $page = $request->get('page', 1);
+        $items = $query->paginate($perPage, ['*'], 'page', $page);
+
+        return Pagination($items);
+    }
+
+    /**
+     * API 3: Summary only (total, rows, in/out counts) from date to date
+     */
+    public function earningsSummary(EarningsSummaryRequest $request)
+    {
+        $startDate = Carbon::parse($request->start_date);
+        $endDate = Carbon::parse($request->end_date);
+
+        $summary = $this->getEarningsSummary($startDate, $endDate);
+
+        return SuccessData('Earnings summary retrieved successfully', $summary);
+    }
+
+    /**
+     * API 4: Paginated payments only (in)
+     */
+    public function payments(EarningsListRequest $request)
+    {
+        $request->merge(['type' => 'in']);
+        return $this->earningsList($request);
+    }
+
+    /**
+     * API 5: Paginated refunds only (out)
+     */
+    public function refunds(EarningsListRequest $request)
+    {
+        $request->merge(['type' => 'out']);
+        return $this->earningsList($request);
+    }
+
+    /**
+     * Helper: Get summary stats for period
+     */
+    private function getEarningsSummary(Carbon $startDate, Carbon $endDate)
+    {
+        $payments = ReservationPay::join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1)
+            ->whereBetween('reservations.start_date', [$startDate, $endDate])
+            ->where('reservation_pay.type', ReservationPay::TYPE_PAYMENT)
+            ->selectRaw('SUM(pay) as total_in, COUNT(*) as count_in')
+            ->first();
+
+        $refunds = DB::table('reservation_pay')
+            ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1)
+            ->whereBetween('reservations.start_date', [$startDate, $endDate])
+            ->where('reservation_pay.type', ReservationPay::TYPE_REFUND)
+            ->selectRaw('SUM(pay) as total_out, COUNT(*) as count_out')
+            ->first();
+
+        $totalRows = DB::table('reservation_pay')
+            ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1)
+            ->whereBetween('reservations.start_date', [$startDate, $endDate])
+            ->count();
+
+        return [
+            'total_in' => $payments->total_in ?? 0,
+            'total_out' => $refunds->total_out ?? 0,
+            'net_earnings' => $payments->total_in ?? 0 - ($refunds->total_out ?? 0),
+            'count_in' => $payments->count_in ?? 0,
+            'count_out' => $refunds->count_out ?? 0,
+            'total_rows' =>  $totalRows,
         ];
     }
 }
-

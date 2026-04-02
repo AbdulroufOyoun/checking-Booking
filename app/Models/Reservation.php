@@ -72,4 +72,14 @@ class Reservation extends Model
     {
         return $this->belongsTo(Reservation_source::class);
     }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(ReservationPay::class);
+    }
+
+    public function extensions(): HasMany
+    {
+        return $this->hasMany(ReservationExtend::class);
+    }
 }
