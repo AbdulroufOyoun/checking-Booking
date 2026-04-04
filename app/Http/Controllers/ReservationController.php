@@ -10,12 +10,15 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomtypePricingplan;
 use App\Models\Suite;
+use App\Models\RefundPolicy;
+use App\Models\ReservationPay;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\Reservation\MakeReservationRequest;
 use App\Http\Requests\Reservation\CheckReservationRequest;
 use App\Http\Requests\Reservation\GetRoomPriceRequest;
 use App\Http\Requests\Reservation\GetReservationByDateRequest;
+use App\Http\Requests\Reservation\RefundRequest;
 use App\Models\RoomPrice;
 use App\Models\RoomPriceMaxDay;
 
@@ -99,6 +102,7 @@ class ReservationController extends Controller
                     throw new \Exception('Room not found: ' . $roomData['room_id']);
                 }
                 if (!$this->isRoomAvailable($roomData['room_id'], $startDate->toDateString(), $endDate->toDateString())) {
+                    $room = Room::find($roomData['room_id']);
                     throw new \Exception('Room ' . ($room->room_number ?? $roomData['room_id']) . ' is not available for dates ' . $start . ' to ' . $end);
                 }
             }
@@ -132,13 +136,22 @@ class ReservationController extends Controller
 
              $total = $subtotal + $taxes;
 
+            // Auto-determine reservation_status based on payment (if not explicitly provided)
+            // 0: unconfirmed/no payment, 1: confirmed/full payment, 2: partial payment (pay >0 but < total)
+            $reservation_status = $request->reservation_status ?? 0;
+            if (!$request->filled('reservation_status')) {
+                if ($request->filled('pay_amount') && $request->pay_amount > 0) {
+                    $reservation_status = ($request->pay_amount >= $total) ? 1 : 2;
+                }
+            }
+
             $reservation = Reservation::create([
                 'client_id'          => $request->client_id,
                 'start_date'         => $request->start_date,
                 'nights'             => $nights,
                 'expire_date'        => $request->expire_date,
                 'reservation_type'   => $request->reservation_type,
-                'reservation_status' => $request->reservation_status ?? 0,
+                'reservation_status' => $reservation_status,
                 'stay_reason_id'     => $request->stay_reason_id,
                 'reservation_source_id' => $request->reservation_source_id,
                 'rent_type'          => $request->rent_type,
@@ -153,6 +166,22 @@ class ReservationController extends Controller
                 'login_time'         => $request->login_time,
                 'user_id'            => $user->id,
             ]);
+
+            // Create initial payment if provided
+            if ($request->filled('pay_amount') && $request->pay_amount > 0) {
+                if ($request->pay_amount > $total) {
+                    throw new \Exception('Pay amount cannot exceed reservation total: ' . $total);
+                }
+                if (!in_array($request->pay_type ?? 0, [0, 1])) {
+                    throw new \Exception('Invalid pay_type. Use 0 for payment, 1 for refund.');
+                }
+                ReservationPay::create([
+                    'reservation_id' => $reservation->id,
+                    'pay' => $request->pay_amount,
+                    'type' => $request->pay_type ?? 0,
+                    'user_id' => auth()->user()->id,
+                ]);
+            }
 
             foreach ($roomsData as $roomData) {
                 $reservationRoom = ReservationRoom::create([
@@ -172,8 +201,6 @@ class ReservationController extends Controller
                     'reservation_room_id' => $reservationRoom->id,
                     'pricing_plan_daily' => $roomTypePlan ? $roomTypePlan->DailyPrice : ($roomType ? $roomType->Min_daily_price : 0),
                     'pricing_plan_monthly' => $roomTypePlan ? $roomTypePlan->MonthlyPrice : ($roomType ? $roomType->Min_monthly_price : 0),
-                    'daily_price' => $roomTypePlan ? $roomTypePlan->DailyPrice : ($roomType ? $roomType->Min_daily_price : 0),
-                    'monthly_price' => $roomTypePlan ? $roomTypePlan->MonthlyPrice : ($roomType ? $roomType->Min_monthly_price : 0),
                     'max_price' => $roomType ? $roomType->Max_daily_price : 0,
                     'min_price' => $roomType ? $roomType->Min_daily_price : 0,
                 ];
@@ -185,7 +212,7 @@ class ReservationController extends Controller
                     RoomPriceMaxDay::create([
                         'room_price_id' => $roomPrice->id,
                         'day' => $day,
-                        'monthly_price' => $roomPriceData['monthly_price'],
+                        'monthly_price' => $roomPriceData['pricing_plan_monthly'],
                     ]);
                 }
             }
@@ -199,22 +226,123 @@ class ReservationController extends Controller
     }
 
     /**
+     * Process refund for a reservation using refund policy discount
+     */
+    public function refund(RefundRequest $request)
+    {
+        try {
+            DB::beginTransaction();
+
+            $reservation = Reservation::with(['payments', 'client'])->findOrFail($request->reservation_id);
+
+            // Authorization: auth user must be the reservation creator or admin (basic, enhance as needed)
+            if (auth()->id() !== $reservation->user_id) {
+                return \Failed('Unauthorized to refund this reservation');
+            }
+
+            // Calculate net paid: payments in - refunds out
+            $paymentsIn = $reservation->payments()->where('type', ReservationPay::TYPE_PAYMENT)->sum('pay');
+            $refundsOut = $reservation->payments()->where('type', ReservationPay::TYPE_REFUND)->sum('pay');
+            $netPaid = $paymentsIn - $refundsOut;
+
+            if ($netPaid <= 0) {
+                return \Failed('No net payments available for refund');
+            }
+
+            if ($request->amount > $netPaid) {
+                return \Failed('Requested amount exceeds net paid amount: ' . $netPaid);
+            }
+
+            // Calculate days before checkin
+            $now = Carbon::now();
+            $startDate = Carbon::parse($reservation->start_date);
+            $daysBeforeCheckin = $startDate->diffInDays($now, false); // positive if future
+
+            $duringStay = $now->gte($startDate) && $now->lte(Carbon::parse($reservation->expire_date));
+
+            // Determine payment_status
+            if ($netPaid == 0) {
+                $paymentStatus = 0;
+            } elseif ($netPaid < $reservation->total) {
+                $paymentStatus = 1;
+            } else {
+                $paymentStatus = 2;
+            }
+
+            // Find matching refund policy (most recent with <= days_before_checkin)
+            $policyQuery = RefundPolicy::where('during_stay', $duringStay ? 1 : 0)
+                ->where('payment_status', $paymentStatus)
+                ->where('days_before_checkin', '<=', abs($daysBeforeCheckin))
+                ->orderBy('days_before_checkin', 'desc')
+                ->first();
+
+            if (!$policyQuery) {
+                return \Failed('No matching refund policy found for current conditions (during_stay: ' . ($duringStay ? 1 : 0) . ', payment_status: ' . $paymentStatus . ', days_before: ' . $daysBeforeCheckin . ')');
+            }
+
+            $refundAmount = $request->amount * $policyQuery->refund_percent / 100;
+            $finalRefundAmount = min($refundAmount, $netPaid);
+
+            if ($finalRefundAmount <= 0) {
+                return \Failed('Refund amount is zero after policy discount');
+            }
+
+            // Create refund record
+            $refundPay = ReservationPay::create([
+                'reservation_id' => $reservation->id,
+                'pay' => $finalRefundAmount,
+                'type' => ReservationPay::TYPE_REFUND,
+                'user_id' => auth()->id(),
+            ]);
+
+            // Update reservation status if fully refunded
+            $newNetPaid = $netPaid - $finalRefundAmount;
+            if ($newNetPaid <= 0) {
+                $reservation->update(['reservation_status' => 3]); // cancelled/refunded
+            }
+
+            DB::commit();
+
+            return \SuccessData('Refund processed successfully', [
+                'refund' => $refundPay->load('user'),
+                'policy' => $policyQuery,
+                'original_net_paid' => $netPaid,
+                'final_refund_amount' => $finalRefundAmount,
+                'remaining_net_paid' => $newNetPaid
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return \Failed($e->getMessage());
+        }
+    }
+
+    /**
      * NEW: Check if room is available for given dates
      * Reuses logic from checkReservation
      */
-    private function isRoomAvailable($roomId, $startDate, $endDate): bool
+private function isRoomAvailable($roomId, $startDate, $endDate)
     {
+        // Check if room is active first
+        $room = Room::where('id', $roomId)
+            ->where('active', 1)
+            ->where('roomStatus', 1)
+            ->first();
+        if (!$room) {
+            return false;
+        }
+        // dd(ReservationRoom::where('room_id', $roomId)
+        //     ->whereHas('reservation', function ($query) use ($startDate, $endDate) {
+        //         $query
+        //         // ->where('reservation_status', '>', 0) // Confirmed or partial payment
+        //               ->where('start_date', '<', $endDate)
+        //               ->where('expire_date', '>', $startDate);})->get());
         return !ReservationRoom::where('room_id', $roomId)
             ->whereHas('reservation', function ($query) use ($startDate, $endDate) {
-                $query->where('expire_date', '>', $startDate)  // Changed >= now() to > startDate, allows end_date == start_date
-                    ->where(function ($q) use ($startDate, $endDate) {
-                        $q->where('start_date', '<', $endDate)
-                            ->orWhere('expire_date', '>', $startDate)
-                            ->orWhere(function ($q) use ($startDate, $endDate) {
-                                $q->where('start_date', '<=', $startDate)
-                                    ->where('expire_date', '>=', $endDate);
-                            });
-                    });
+                $query
+                // ->where('reservation_status', '>', 0) // Confirmed or partial payment
+                      ->where('start_date', '<', $endDate)
+                      ->where('expire_date', '>', $startDate);
             })->exists();
     }
 
@@ -600,15 +728,16 @@ class ReservationController extends Controller
                     $roomQuery->where('floor_id', $request->floor_id);
                 }
                 if ($request->has('suite_id') && $request->suite_id) {
-                    $roomQuery->where('suite_id', $request->suite_id);}
-                    ;});
+                    $roomQuery->where('suite_id', $request->suite_id);
+                }
+            });
             $reservations = $query->get();
-            if ($reservations->isEmpty()) {}
+            if ($reservations->isEmpty()) {
+                return \SuccessData('No reservations found', []);
+            }
+            return \SuccessData('Reservations found', $reservations);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }
     }
-
-
 }
-
