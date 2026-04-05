@@ -6,7 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Contracts\Validation\Validator;
 
-class GetFloorEarningsRequest extends FormRequest
+class ء extends FormRequest
 {
     public function authorize(): bool
     {

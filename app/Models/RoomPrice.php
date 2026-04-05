@@ -15,8 +15,7 @@ class RoomPrice extends Model
         'reservation_room_id',
         'pricing_plan_daily',
         'pricing_plan_monthly',
-        'daily_price',
-        'monthly_price',
+
         'max_price',
         'min_price',
     ];
@@ -24,8 +23,7 @@ class RoomPrice extends Model
     protected $casts = [
         'pricing_plan_daily' => 'decimal:2',
         'pricing_plan_monthly' => 'decimal:2',
-        'daily_price' => 'decimal:2',
-        'monthly_price' => 'decimal:2',
+
         'max_price' => 'decimal:2',
         'min_price' => 'decimal:2',
     ];

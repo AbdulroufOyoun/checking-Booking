@@ -44,4 +44,10 @@ class ReservationRoom extends Model
     {
         return $this->belongsTo(Suite::class);
     }
+
+    public function roomPrices()
+    {
+        return $this->hasMany(RoomPrice::class, 'reservation_room_id');
+    }
 }
+
