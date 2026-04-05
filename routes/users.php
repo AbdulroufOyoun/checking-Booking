@@ -30,6 +30,7 @@ use App\Http\Controllers\RevenueController;
 use App\Http\Controllers\RefundPolicyController;
 
 Route::post('login', [UsersController::class, 'login']);
+
 // Route::middleware(['can_do:manage_settings'])->group(function () {
 // });
 Route::get('login_error',[UsersController::class , 'loginError'])->name('login');
@@ -198,6 +199,7 @@ Route::get('earnings-list', [EarningController::class, 'earningsList']);
 Route::get('earnings-summary', [EarningController::class, 'earningsSummary']);
 Route::get('payments', [EarningController::class, 'payments']);
 Route::get('refunds', [EarningController::class, 'refunds']);
+Route::post('refund', [ReservationController::class, 'refund']);
 
 // Revenue APIs
 Route::get('revenue/total', [RevenueController::class, 'getTotalRevenue']);
@@ -209,7 +211,6 @@ Route::get('revenue/roomtype/{entity_id}', [RevenueController::class, 'getRoomTy
 
 Route::apiResource('refund-policies', RefundPolicyController::class);
 Route::delete('refund-policies', [RefundPolicyController::class, 'destroy']);
-
 
     });
 

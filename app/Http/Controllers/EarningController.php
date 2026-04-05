@@ -39,18 +39,18 @@ class EarningController extends Controller
     }
 
     /**
-     * API 2: Paginated earnings list (all/payments/refunds) from date to date
+     * API 2: Paginated earnings list (all/payments/refunds) from payment date to payment date
      */
     public function earningsList(EarningsListRequest $request)
     {
         $query = ReservationPay::select('reservation_pay.*', 'reservations.start_date as res_start', 'reservations.client_id')
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->where('reservations.reservation_status', 1);
+            ->whereIn('reservations.reservation_status', [1, 2]);
 
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $startDate = Carbon::parse($request->start_date);
             $endDate = Carbon::parse($request->end_date);
-            $query->whereBetween('reservations.start_date', [$startDate, $endDate]);
+$query->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()]);
         }
 
         if ($request->type === 'in') {
@@ -69,7 +69,7 @@ class EarningController extends Controller
     }
 
     /**
-     * API 3: Summary only (total, rows, in/out counts) from date to date
+     * API 3: Summary only (total, rows, in/out counts) from payment date to payment date
      */
     public function earningsSummary(EarningsSummaryRequest $request)
     {
@@ -105,30 +105,30 @@ class EarningController extends Controller
     private function getEarningsSummary(Carbon $startDate, Carbon $endDate)
     {
         $payments = ReservationPay::join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->where('reservations.reservation_status', 1)
-            ->whereBetween('reservations.start_date', [$startDate, $endDate])
+            ->whereIn('reservations.reservation_status', [1, 2])
+            ->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()])
             ->where('reservation_pay.type', ReservationPay::TYPE_PAYMENT)
             ->selectRaw('SUM(pay) as total_in, COUNT(*) as count_in')
             ->first();
 
         $refunds = DB::table('reservation_pay')
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->where('reservations.reservation_status', 1)
-            ->whereBetween('reservations.start_date', [$startDate, $endDate])
+            ->whereIn('reservations.reservation_status', [1, 2])
+            ->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()])
             ->where('reservation_pay.type', ReservationPay::TYPE_REFUND)
             ->selectRaw('SUM(pay) as total_out, COUNT(*) as count_out')
             ->first();
 
         $totalRows = DB::table('reservation_pay')
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->where('reservations.reservation_status', 1)
-            ->whereBetween('reservations.start_date', [$startDate, $endDate])
+            ->whereIn('reservations.reservation_status', [1, 2])
+            ->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()])
             ->count();
-
+            // return [ $payments->total_in ?? 0 - ($refunds->total_out ?? 0)];
         return [
             'total_in' => $payments->total_in ?? 0,
             'total_out' => $refunds->total_out ?? 0,
-            'net_earnings' => $payments->total_in ?? 0 - ($refunds->total_out ?? 0),
+            'net_earnings' => $payments->total_in   - $refunds->total_out ,
             'count_in' => $payments->count_in ?? 0,
             'count_out' => $refunds->count_out ?? 0,
             'total_rows' =>  $totalRows,

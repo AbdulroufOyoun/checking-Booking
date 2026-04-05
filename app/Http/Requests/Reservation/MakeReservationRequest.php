@@ -26,7 +26,7 @@ class MakeReservationRequest extends FormRequest
             // nights يحسب تلقائياً من start_date و expire_date
 
             'reservation_type'      => 'required|in:0,1',
-            'reservation_status'    => 'nullable|in:0,1',
+'reservation_status'    => 'nullable|in:0,1,2,3',  // 0:unconfirmed,1:confirmed,2:partial,3:cancelled
             'stay_reason_id'        => 'required|numeric|exists:stay_reasons,id',
             'reservation_source_id' => 'required|numeric|exists:reservation_sources,id',
             'rent_type'             => 'required|in:0,1',
@@ -38,6 +38,8 @@ class MakeReservationRequest extends FormRequest
             // 'taxes'                 => 'nullable|numeric|min:0',
             'logedin'               => 'nullable|in:0,1',
             'login_time'            => 'nullable|date',
+            'pay_amount'            => 'nullable|numeric|min:0',
+// 'pay_type'              => 'nullable|in:0,1',  // 0: payment, 1: refund
         ];
     }
 

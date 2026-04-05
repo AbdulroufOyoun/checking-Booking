@@ -232,84 +232,94 @@ class ReservationController extends Controller
     {
         try {
             DB::beginTransaction();
-
             $reservation = Reservation::with(['payments', 'client'])->findOrFail($request->reservation_id);
 
-            // Authorization: auth user must be the reservation creator or admin (basic, enhance as needed)
-            if (auth()->id() !== $reservation->user_id) {
-                return \Failed('Unauthorized to refund this reservation');
+            // Prevent refund if already canceled (status 2)
+            if ($reservation->reservation_status == 2) {
+                return \Failed('الحجز ملغى مسبقاً، لا يمكن الاسترجاع');
             }
 
-            // Calculate net paid: payments in - refunds out
+            // 1. حساب صافي المبلغ المدفوع
             $paymentsIn = $reservation->payments()->where('type', ReservationPay::TYPE_PAYMENT)->sum('pay');
             $refundsOut = $reservation->payments()->where('type', ReservationPay::TYPE_REFUND)->sum('pay');
             $netPaid = $paymentsIn - $refundsOut;
 
             if ($netPaid <= 0) {
-                return \Failed('No net payments available for refund');
+                return \Failed('لا يوجد مبالغ مدفوعة قابلة للاسترجاع');
             }
 
-            if ($request->amount > $netPaid) {
-                return \Failed('Requested amount exceeds net paid amount: ' . $netPaid);
-            }
-
-            // Calculate days before checkin
+            // 2. حساب التوقيت بدقة
             $now = Carbon::now();
             $startDate = Carbon::parse($reservation->start_date);
-            $daysBeforeCheckin = $startDate->diffInDays($now, false); // positive if future
+            $expireDate = Carbon::parse($reservation->expire_date);
 
-            $duringStay = $now->gte($startDate) && $now->lte(Carbon::parse($reservation->expire_date));
+            // حساب الفرق بالأيام (رقم موجب إذا كان قبل الدخول)
+            $daysBeforeCheckin = (int) $now->diffInDays($startDate, false);
 
-            // Determine payment_status
-            if ($netPaid == 0) {
-                $paymentStatus = 0;
-            } elseif ($netPaid < $reservation->total) {
-                $paymentStatus = 1;
+            // تحديد هل نحن أثناء الإقامة
+            $duringStay = $now->betweenIncluded($startDate, $expireDate) ? 1 : 0;
+
+            // 3. تحديد حالة الدفع من reservation_pay (كما مطلوب)
+            // 0: لا يوجد، 1: جزئي (غير كامل)، 2: كامل (total مدفوع)
+            if ($netPaid >= $reservation->total) {
+                $paymentStatus = 2; // دفع كامل الكلي
+            } elseif ($netPaid > 0) {
+                $paymentStatus = 1; // دفع جزئي
             } else {
-                $paymentStatus = 2;
+                $paymentStatus = 0; // لم يدفع
             }
 
-            // Find matching refund policy (most recent with <= days_before_checkin)
-            $policyQuery = RefundPolicy::where('during_stay', $duringStay ? 1 : 0)
+// 4. البحث عن السياسة الأقرب (nearest) للأيام المحسوبة - أعلى days_before_checkin <= actual days
+            $policyQuery = RefundPolicy::where('during_stay', $duringStay)
                 ->where('payment_status', $paymentStatus)
-                ->where('days_before_checkin', '<=', abs($daysBeforeCheckin))
-                ->orderBy('days_before_checkin', 'desc')
+                ->where('days_before_checkin', '>=', $daysBeforeCheckin)
+                ->orderBy('days_before_checkin', 'asc')
                 ->first();
 
+            // 5. في حال لم يجد سياسة
             if (!$policyQuery) {
-                return \Failed('No matching refund policy found for current conditions (during_stay: ' . ($duringStay ? 1 : 0) . ', payment_status: ' . $paymentStatus . ', days_before: ' . $daysBeforeCheckin . ')');
+                $errorMsg = "لا توجد سياسة استرجاع تنطبق على حالتك. الأيام المتبقية: " . $daysBeforeCheckin . "، حالة الدفع: " . $paymentStatus;
+                return \Failed($errorMsg);
             }
 
-            $refundAmount = $request->amount * $policyQuery->refund_percent / 100;
+            // 6. حساب المبلغ بناءً على السياسة
+            $refundAmount = ($reservation->total * $policyQuery->refund_percent) / 100;
+
+            // التأكد أننا لا نعيد أكثر مما دفعه العميل فعلياً
             $finalRefundAmount = min($refundAmount, $netPaid);
 
             if ($finalRefundAmount <= 0) {
-                return \Failed('Refund amount is zero after policy discount');
+                return \Failed('بناءً على سياسة الإلغاء، لا يوجد مبلغ مستحق للاسترجاع في هذا التوقيت.');
             }
+                DB::commit();
 
-            // Create refund record
-            $refundPay = ReservationPay::create([
-                'reservation_id' => $reservation->id,
-                'pay' => $finalRefundAmount,
-                'type' => ReservationPay::TYPE_REFUND,
-                'user_id' => auth()->id(),
-            ]);
+            try {
+            // DB::beginTransaction();
 
-            // Update reservation status if fully refunded
-            $newNetPaid = $netPaid - $finalRefundAmount;
-            if ($newNetPaid <= 0) {
-                $reservation->update(['reservation_status' => 3]); // cancelled/refunded
+                // إنشاء سجل الاسترجاع
+                 $refundPay = ReservationPay::create([
+                    'reservation_id' => $reservation->id,
+                    'pay' => $finalRefundAmount,
+                    'type' => ReservationPay::TYPE_REFUND,
+                    'user_id' => auth()->id(),
+                ]);
+
+                // تحديث حالة الحجز إلى canceled (status = 2 كما مطلوب)
+                $reservation->update(['reservation_status' => 2]);
+
+                // DB::commit();
+
+                return \SuccessData('تمت عملية الاسترجاع بنجاح', [
+                    'refund_id' => $refundPay->id,
+                    'amount' => $finalRefundAmount,
+                    'policy_name' => $policyQuery->name,
+                    'days_calculated' => $daysBeforeCheckin
+                ]);
+
+            } catch (\Exception $e) {
+                // DB::rollBack();
+                return \Failed('خطأ تقني: ' . $e->getMessage());
             }
-
-            DB::commit();
-
-            return \SuccessData('Refund processed successfully', [
-                'refund' => $refundPay->load('user'),
-                'policy' => $policyQuery,
-                'original_net_paid' => $netPaid,
-                'final_refund_amount' => $finalRefundAmount,
-                'remaining_net_paid' => $newNetPaid
-            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -592,9 +602,13 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                                 ? $roomType->Max_daily_price
                                 : $roomType->Min_daily_price;
                             $days[$date->toDateString()] = $price;
+                            $totalPrice += $price
+                                ? $roomType->Max_daily_price
+                                : $roomType->Min_daily_price;
+                            $days[$date->toDateString()] = $price;
                             $totalPrice += $price;
                         }
-                        return \SuccessData('Daily pricing calculated', ['days' => $days, 'totalPrice' => $totalPrice]);
+                        return SuccessData('Daily pricing calculated', ['days' => $days, 'totalPrice' => $totalPrice]);
                     case 2:
                         $priceType = 'Max_daily_price';
                         break;
@@ -605,7 +619,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                         $totalPrice += $roomType->$priceType;
                     }
                 }
-                return \SuccessData('Daily pricing calculated', ['days' => $days, 'totalPrice' => $totalPrice]);
+                return SuccessData('Daily pricing calculated', ['days' => $days, 'totalPrice' => $totalPrice]);
             }
 
             //  الحجز الشهري
@@ -645,7 +659,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                                     $days[$date->toDateString()] = $price;
                                     $totalPrice += $price;
                                 }
-                                return \SuccessData('Monthly pricing calculated with peak months', [
+                                return SuccessData('Monthly pricing calculated with peak months', [
                                     'startDate' => $startDate->toDateString(),
                                     'endDate' => $endDate->toDateString(),
                                     'inPlanDays' => $inPlanDays,
@@ -679,7 +693,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                                 $days[$date->toDateString()] = $price;
                                 $totalPrice += $price;
                             }
-                            return \SuccessData('Monthly pricing calculated with peak months', [
+                            return SuccessData('Monthly pricing calculated with peak months', [
                                 'startDate' => $startDate->toDateString(),
                                 'endDate' => $endDate->toDateString(),
                                 'days' => $days,
@@ -693,7 +707,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                             break;
                     }
                 }
-                return \SuccessData('Monthly pricing calculated', [
+                return SuccessData('Monthly pricing calculated', [
                     'startDate' => $startDate->toDateString(),
                     'endDate' => $endDate->toDateString(),
                     'numberOfMonths' => $numberOfMonths,
@@ -702,7 +716,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                 ]);
             }
         } catch (\Exception $e) {
-            return \Failed($e->getMessage());
+            return Failed($e->getMessage());
         }
     }
 
@@ -733,11 +747,11 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
             });
             $reservations = $query->get();
             if ($reservations->isEmpty()) {
-                return \SuccessData('No reservations found', []);
+                return SuccessData('No reservations found', []);
             }
-            return \SuccessData('Reservations found', $reservations);
+            return SuccessData('Reservations found', $reservations);
         } catch (\Exception $e) {
-            return \Failed($e->getMessage());
+            return Failed($e->getMessage());
         }
     }
 }
