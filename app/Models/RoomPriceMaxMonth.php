@@ -5,17 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class RoomPriceMaxDay extends Model
+class RoomPriceMaxMonth extends Model
 {
     use HasFactory;
 
-    protected $table = 'room_price_max_days';
+    protected $table = 'room_price_max_months';
 
     protected $fillable = [
         'room_price_id',
-        'day',
-    ];
+        'month',
+];
 
+    protected $casts = [
+        'price' => 'decimal:2',
+    ];
 
     public function roomPrice()
     {

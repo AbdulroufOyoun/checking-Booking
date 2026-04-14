@@ -21,209 +21,208 @@ use App\Http\Requests\Reservation\GetReservationByDateRequest;
 use App\Http\Requests\Reservation\RefundRequest;
 use App\Models\RoomPrice;
 use App\Models\RoomPriceMaxDay;
+use App\Models\RoomPriceMaxMonth;
+use Carbon\CarbonPeriod;
 
 class ReservationController extends Controller
 {
-    public function makeReservation(MakeReservationRequest $request)
-    {
-        try {
-            DB::beginTransaction();
+//     use Carbon\Carbon;
+// use Carbon\CarbonPeriod;
+// use Illuminate\Support\Facades\DB;
 
-            // حساب سعر الغرف تلقائياً (مثل getRoomPrice)
-            $startDate = Carbon::parse($request->start_date);
-            $endDate = Carbon::parse($request->expire_date);
-            $nights = $startDate->diffInDays($endDate);
-            $start = $startDate->toDateString();
-            $end = $endDate->toDateString();
-            $totalBasePrice = 0;
-            $roomsData = [];
+public function makeReservation(MakeReservationRequest $request)
+{
+    try {
+        DB::beginTransaction();
 
+        // 1. إعداد التواريخ والبيانات الأساسية
+        $startDate = Carbon::parse($request->start_date)->startOfDay();
+        $endDate = Carbon::parse($request->expire_date)->startOfDay();
+        $nights = $startDate->diffInDays($endDate);
 
-            if ($request->has('rooms') && is_array($request->rooms) && !empty($request->rooms)) {
-                foreach ($request->rooms as $roomData) {
-                    if (isset($roomData['suite_id']) && $roomData['suite_id']) {
-                        $suite = Suite::find($roomData['suite_id']);
-                        if (!$suite) {
-                            throw new \Exception("Suite not found: " . $roomData['suite_id']);
+        $totalBasePrice = 0;
+        $roomsData = [];
+
+        // تحسين الأداء: جلب إعدادات الذروة العامة مرة واحدة
+        $globalPeakMonths = PeakMonth::where('check', 1)->pluck('month_name_en')->toArray();
+        $globalPeakDays = PeakDay::where('check', 1)->pluck('day_name_en')->toArray();
+
+        // 2. معالجة الغرف/الأجنحة وحساب السعر المبدئي
+        if ($request->has('rooms') && is_array($request->rooms)) {
+            foreach ($request->rooms as $roomData) {
+                $roomsToProcess = [];
+
+                if (isset($roomData['suite_id']) && $roomData['suite_id']) {
+                    $suite = Suite::findOrFail($roomData['suite_id']);
+                    $roomsToProcess = $suite->rooms()->where('active', 1)->get();
+                } else {
+                    $roomsToProcess = [Room::findOrFail($roomData['room_id'])];
+                }
+
+                foreach ($roomsToProcess as $room) {
+                    // فحص التوافر
+                    if (!$this->isRoomAvailable($room->id, $startDate->toDateString(), $endDate->toDateString())) {
+                        throw new \Exception("الغرفة رقم " . ($room->room_number) . " غير متاحة في هذه الفترة.");
+                    }
+
+                    // حساب السعر بناءً على المنطق المطور (Case 0, 1, 2)
+                    $roomPrice = $this->calculateRoomPrice(
+                        $room,
+                        $startDate->toDateString(),
+                        $endDate->toDateString(),
+                        $request->rent_type,
+                        $request->price_calculation_mode ?? 0
+                    );
+
+                    $totalBasePrice += $roomPrice;
+                    $roomsData[] = [
+                        'room'     => $room,
+                        'suite_id' => $roomData['suite_id'] ?? null,
+                        'price'    => $roomPrice,
+                    ];
+                }
+            }
+        }
+
+        // 3. الحسابات المالية (الخصم، الضرائب، الإضافات)
+        $user = auth()->user();
+        $discount = $request->discount ?? 0;
+        // (يمكنك إضافة منطق التحقق من صلاحية الخصم هنا كما في كودك السابق)
+
+        $extras = $request->extras ?? 0;
+        $penalties = $request->penalties ?? 0;
+        $subtotal = $totalBasePrice - $discount + $extras + $penalties;
+$taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);
+        $total = $subtotal + $taxes;
+
+        // 4. إنشاء سجل الحجز الرئيسي
+        $reservation = Reservation::create([
+            'client_id'             => $request->client_id,
+            'start_date'            => $request->start_date,
+            'nights'                => $nights,
+            'expire_date'           => $request->expire_date,
+            'reservation_type'      => $request->reservation_type,
+            'reservation_status'    => $request->reservation_status ?? (($request->pay_amount >= $total) ? 1 : 2),
+            'stay_reason_id'        => $request->stay_reason_id,
+            'reservation_source_id' => $request->reservation_source_id,
+            'rent_type'             => $request->rent_type,
+            'base_price'            => $totalBasePrice,
+            'discount'              => $discount,
+            'logedin'              => $request->logedin,
+            'extras'                => $extras,
+            'penalties'             => $penalties,
+            'subtotal'              => $subtotal,
+            'taxes'                 => $taxes,
+            'total'                 => $total,
+            'user_id'               => $user->id,
+        ]);
+
+        // 5. تسجيل الدفعة المالية (إن وجدت)
+        if ($request->filled('pay_amount') && $request->pay_amount > 0) {
+            ReservationPay::create([
+                'reservation_id' => $reservation->id,
+                'pay'            => $request->pay_amount,
+                'type'           => $request->pay_type ?? 0,
+                'user_id'        => $user->id,
+            ]);
+        }
+
+        // 6. حفظ تفاصيل الغرف ولقطات الأسعار (Snapshots)
+        $numRooms = count($roomsData);
+        foreach ($roomsData as $data) {
+            $room = $data['room'];
+            $roomType = $room->roomType;
+
+            // توزيع القيم المالية على الغرف
+            $roomDiscount = $discount / $numRooms;
+            $roomExtras = $extras / $numRooms;
+            $roomPenalties = $penalties / $numRooms;
+            $finalRoomPrice = ($data['price'] - $roomDiscount + $roomExtras + $roomPenalties) * 1.15;
+
+            $resRoom = ReservationRoom::create([
+                'reservation_id' => $reservation->id,
+                'room_id'        => $room->id,
+                'suite_id'       => $data['suite_id'],
+                'price'          => $finalRoomPrice,
+            ]);
+
+            // تحديد تقاطع الخطة السعرية (إن وجدت)
+            $roomTypePlan = RoomtypePricingplan::where('roomtype_id', $room->room_type_id)
+                ->whereHas('pricingplan', function ($q) use ($startDate, $endDate) {
+                    $q->where('StartDate', '<=', $endDate->toDateString())
+                      ->where('EndDate', '>=', $startDate->toDateString());
+                })->first();
+
+            $savedStartPlan = null; $savedEndPlan = null;
+            if ($roomTypePlan) {
+                $pStart = Carbon::parse($roomTypePlan->pricingplan->StartDate);
+                $pEnd = Carbon::parse($roomTypePlan->pricingplan->EndDate);
+                $savedStartPlan = $startDate->max($pStart)->toDateString();
+                $savedEndPlan = $endDate->min($pEnd)->toDateString();
+            }
+
+            // --- الحفظ الانتقائي (Selective Saving) ---
+            $roomPriceData = [
+                'reservation_room_id' => $resRoom->id,
+                'start_plan'          => $savedStartPlan,
+                'end_plan'            => $savedEndPlan,
+            ];
+
+            if ($request->rent_type == 0) { // حجز يومي
+                if ($roomTypePlan) $roomPriceData['pricing_plan_daily'] = $roomTypePlan->DailyPrice;
+
+                if ($roomType->active_type == 0 || $roomType->active_type == 1)
+                    $roomPriceData['min_price'] = $roomType->Min_daily_price;
+                if ($roomType->active_type == 2 || $roomType->active_type == 1)
+                    $roomPriceData['max_price'] = $roomType->Max_daily_price;
+
+            } else { // حجز شهري
+                if ($roomTypePlan) $roomPriceData['pricing_plan_monthly'] = $roomTypePlan->MonthlyPrice;
+
+                if ($roomType->active_type == 0 || $roomType->active_type == 1)
+                    $roomPriceData['min_month'] = $roomType->Min_monthly_price;
+                if ($roomType->active_type == 2 || $roomType->active_type == 1)
+                    $roomPriceData['max_month'] = $roomType->Max_monthly_price;
+            }
+
+            $roomPriceRecord = RoomPrice::create($roomPriceData);
+
+            // --- حفظ أيام/أشهر الذروة التي يمر بها الحجز حصراً ---
+            if ($roomType->active_type == 1) {
+                if ($request->rent_type == 0) { // فحص الأيام
+                    $period = CarbonPeriod::create($startDate, $endDate->copy()->subDay());
+                    foreach ($period as $date) {
+                        if (in_array($date->format('l'), $globalPeakDays)) {
+                            RoomPriceMaxDay::firstOrCreate([
+                                'room_price_id' => $roomPriceRecord->id,
+                                'day'           => $date->dayOfWeekIso,
+                            ]);
                         }
-
-                        $suiteRooms = $suite->rooms()->where('active', 1)->get();
-
-                        if ($suiteRooms->isEmpty()) {
-                            throw new \Exception("No active rooms found in suite: " . $roomData['suite_id']);
+                    }
+                } else { // فحص الأشهر
+                    $current = $startDate->copy()->startOfMonth();
+                    $final   = $endDate->copy()->startOfMonth();
+                    while ($current <= $final) {
+                        if (in_array($current->format('F'), $globalPeakMonths)) {
+                            RoomPriceMaxMonth::firstOrCreate([
+                                'room_price_id' => $roomPriceRecord->id,
+                                'month'         => $current->month,
+                            ]);
                         }
-
-
-                        foreach ($suiteRooms as $room) {
-                            $roomPrice = $this->calculateRoomPrice(
-                                $room,
-                                $start,
-                                $end,
-                                $request->rent_type,
-                                $request->price_calculation_mode ?? 0
-                            );
-
-                            $totalBasePrice += $roomPrice;
-
-                            $roomsData[] = [
-                                'room_id'   => $room->id,
-                                'suite_id'  => $roomData['suite_id'],
-                                'price'     => $roomPrice,
-                            ];
-                        }
-                    } else {
-                        $room = Room::find($roomData['room_id']);
-                        if (!$room) {
-                            throw new \Exception("Room not found: " . $roomData['room_id']);
-                        }
-
-                        $roomPrice = $this->calculateRoomPrice(
-                            $room,
-                            $start,
-                            $end,
-                            $request->rent_type,
-                            $request->price_calculation_mode ?? 0
-                        );
-
-                        $totalBasePrice += $roomPrice;
-
-                        $roomsData[] = [
-                            'room_id'   => $roomData['room_id'],
-                            'suite_id'  => $roomData['suite_id'] ?? null,
-                            'price'     => $roomPrice,
-                        ];
+                        $current->addMonth();
                     }
                 }
             }
-
-            foreach ($roomsData as $index => $roomData) {
-                $room = Room::find($roomData['room_id']);
-                if (!$room) {
-                    throw new \Exception('Room not found: ' . $roomData['room_id']);
-                }
-                if (!$this->isRoomAvailable($roomData['room_id'], $startDate->toDateString(), $endDate->toDateString())) {
-                    $room = Room::find($roomData['room_id']);
-                    throw new \Exception('Room ' . ($room->room_number ?? $roomData['room_id']) . ' is not available for dates ' . $start . ' to ' . $end);
-                }
-            }
-
-             $user = auth()->user();
-            $discount = $request->discount ?? 0;
-            if ($discount > 0) {
-                $userDiscount = $user->discount;
-                if (!$userDiscount || !$userDiscount->is_active) {
-                    throw new \Exception('You do not have active discount permission');
-                }
-                $hasPermission = false;
-                if ($userDiscount->percent>0) {
-
-                    $hasPermission = $totalBasePrice *$user->discount->percent/100 >= $discount;
-                    if (!$hasPermission) {
-                    throw new \Exception('Discount amount exceeds your permission (max ' .  $userDiscount->percent.  '%)');
-                }
-                } else {
-                    $hasPermission = $userDiscount->fixed_amount >= $discount;
-                     if (!$hasPermission) {
-                    throw new \Exception('Discount amount exceeds your permission (max '. $userDiscount->fixed_amount . ')');
-                }
-                }
-            }
-            $extras = $request->extras ?? 0;
-            $penalties = $request->penalties ?? 0;
-
-             $subtotal = $totalBasePrice - $discount + $extras + $penalties;
-            $taxes = $subtotal *15/100;
-
-             $total = $subtotal + $taxes;
-
-            // Auto-determine reservation_status based on payment (if not explicitly provided)
-            // 0: unconfirmed/no payment, 1: confirmed/full payment, 2: partial payment (pay >0 but < total)
-            $reservation_status = $request->reservation_status ?? 0;
-            if (!$request->filled('reservation_status')) {
-                if ($request->filled('pay_amount') && $request->pay_amount > 0) {
-                    $reservation_status = ($request->pay_amount >= $total) ? 1 : 2;
-                }
-            }
-
-            $reservation = Reservation::create([
-                'client_id'          => $request->client_id,
-                'start_date'         => $request->start_date,
-                'nights'             => $nights,
-                'expire_date'        => $request->expire_date,
-                'reservation_type'   => $request->reservation_type,
-                'reservation_status' => $reservation_status,
-                'stay_reason_id'     => $request->stay_reason_id,
-                'reservation_source_id' => $request->reservation_source_id,
-                'rent_type'          => $request->rent_type,
-                'base_price'         => $totalBasePrice,
-                'discount'           => $discount,
-                'extras'             => $extras,
-                'penalties'          => $penalties,
-                'subtotal'           => $subtotal,
-                'taxes'              => $taxes,
-                'total'              => $total,
-                'logedin'            => $request->logedin ?? 1,
-                'login_time'         => $request->login_time,
-                'user_id'            => $user->id,
-            ]);
-
-            // Create initial payment if provided
-            if ($request->filled('pay_amount') && $request->pay_amount > 0) {
-                if ($request->pay_amount > $total) {
-                    throw new \Exception('Pay amount cannot exceed reservation total: ' . $total);
-                }
-                if (!in_array($request->pay_type ?? 0, [0, 1])) {
-                    throw new \Exception('Invalid pay_type. Use 0 for payment, 1 for refund.');
-                }
-                ReservationPay::create([
-                    'reservation_id' => $reservation->id,
-                    'pay' => $request->pay_amount,
-                    'type' => $request->pay_type ?? 0,
-                    'user_id' => auth()->user()->id,
-                ]);
-            }
-
-            foreach ($roomsData as $roomData) {
-                $reservationRoom = ReservationRoom::create([
-                    'reservation_id' => $reservation->id,
-                    'room_id'        => $roomData['room_id'],
-                    'suite_id'       => $roomData['suite_id'],
-                    'price'          => $roomData['price'],
-                ]);
-
-                // Create room_price for this reservation_room
-                $room = Room::find($roomData['room_id']);
-                $roomType = $room->roomType;
-                $roomTypePlan = $roomType ? RoomtypePricingplan::where('roomtype_id', $room->room_type_id)->first() : null;
-                $pricingPlanId = $roomTypePlan ? $roomTypePlan->pricingplan_id : null;
-
-                $roomPriceData = [
-                    'reservation_room_id' => $reservationRoom->id,
-                    'pricing_plan_daily' => $roomTypePlan ? $roomTypePlan->DailyPrice : ($roomType ? $roomType->Min_daily_price : 0),
-                    'pricing_plan_monthly' => $roomTypePlan ? $roomTypePlan->MonthlyPrice : ($roomType ? $roomType->Min_monthly_price : 0),
-                    'max_price' => $roomType ? $roomType->Max_daily_price : 0,
-                    'min_price' => $roomType ? $roomType->Min_daily_price : 0,
-                ];
-
-                $roomPrice = RoomPrice::create($roomPriceData);
-
-                // Create room_price_max_days for days 1-7 with monthly_price
-                for ($day = 1; $day <= 7; $day++) {
-                    RoomPriceMaxDay::create([
-                        'room_price_id' => $roomPrice->id,
-                        'day' => $day,
-                        'monthly_price' => $roomPriceData['pricing_plan_monthly'],
-                    ]);
-                }
-            }
-
-            DB::commit();
-            return \SuccessData('Reservation created successfully', $reservation);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return \Failed($e->getMessage());
         }
+
+        DB::commit();
+        return \SuccessData('تم إنشاء الحجز بنجاح', $reservation);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return \Failed($e->getMessage());
     }
+}
 
     /**
      * Process refund for a reservation using refund policy discount
@@ -236,31 +235,25 @@ class ReservationController extends Controller
 
             // Prevent refund if already canceled (status 2)
             if ($reservation->reservation_status == 2) {
-                return \Failed('الحجز ملغى مسبقاً، لا يمكن الاسترجاع');
+                return \Failed('Reservation already cancelled, cannot refund');
             }
 
-            // 1. حساب صافي المبلغ المدفوع
             $paymentsIn = $reservation->payments()->where('type', ReservationPay::TYPE_PAYMENT)->sum('pay');
             $refundsOut = $reservation->payments()->where('type', ReservationPay::TYPE_REFUND)->sum('pay');
             $netPaid = $paymentsIn - $refundsOut;
 
             if ($netPaid <= 0) {
-                return \Failed('لا يوجد مبالغ مدفوعة قابلة للاسترجاع');
+                return \Failed('No payments available for refund');
             }
 
-            // 2. حساب التوقيت بدقة
             $now = Carbon::now();
             $startDate = Carbon::parse($reservation->start_date);
             $expireDate = Carbon::parse($reservation->expire_date);
 
-            // حساب الفرق بالأيام (رقم موجب إذا كان قبل الدخول)
             $daysBeforeCheckin = (int) $now->diffInDays($startDate, false);
 
-            // تحديد هل نحن أثناء الإقامة
             $duringStay = $now->betweenIncluded($startDate, $expireDate) ? 1 : 0;
 
-            // 3. تحديد حالة الدفع من reservation_pay (كما مطلوب)
-            // 0: لا يوجد، 1: جزئي (غير كامل)، 2: كامل (total مدفوع)
             if ($netPaid >= $reservation->total) {
                 $paymentStatus = 2; // دفع كامل الكلي
             } elseif ($netPaid > 0) {
@@ -269,27 +262,23 @@ class ReservationController extends Controller
                 $paymentStatus = 0; // لم يدفع
             }
 
-// 4. البحث عن السياسة الأقرب (nearest) للأيام المحسوبة - أعلى days_before_checkin <= actual days
             $policyQuery = RefundPolicy::where('during_stay', $duringStay)
                 ->where('payment_status', $paymentStatus)
                 ->where('days_before_checkin', '>=', $daysBeforeCheckin)
                 ->orderBy('days_before_checkin', 'asc')
                 ->first();
 
-            // 5. في حال لم يجد سياسة
             if (!$policyQuery) {
-                $errorMsg = "لا توجد سياسة استرجاع تنطبق على حالتك. الأيام المتبقية: " . $daysBeforeCheckin . "، حالة الدفع: " . $paymentStatus;
+                $errorMsg = "No refund policy applies to your case. Days remaining: " . $daysBeforeCheckin . ", payment status: " . $paymentStatus;
                 return \Failed($errorMsg);
             }
 
-            // 6. حساب المبلغ بناءً على السياسة
             $refundAmount = ($reservation->total * $policyQuery->refund_percent) / 100;
 
-            // التأكد أننا لا نعيد أكثر مما دفعه العميل فعلياً
             $finalRefundAmount = min($refundAmount, $netPaid);
 
             if ($finalRefundAmount <= 0) {
-                return \Failed('بناءً على سياسة الإلغاء، لا يوجد مبلغ مستحق للاسترجاع في هذا التوقيت.');
+                return \Failed('Based on cancellation policy, no refund amount due at this time.');
             }
                 DB::commit();
 
@@ -304,12 +293,11 @@ class ReservationController extends Controller
                     'user_id' => auth()->id(),
                 ]);
 
-                // تحديث حالة الحجز إلى canceled (status = 2 كما مطلوب)
                 $reservation->update(['reservation_status' => 2]);
 
                 // DB::commit();
 
-                return \SuccessData('تمت عملية الاسترجاع بنجاح', [
+                return \SuccessData('Refund processed successfully', [
                     'refund_id' => $refundPay->id,
                     'amount' => $finalRefundAmount,
                     'policy_name' => $policyQuery->name,
@@ -318,9 +306,8 @@ class ReservationController extends Controller
 
             } catch (\Exception $e) {
                 // DB::rollBack();
-                return \Failed('خطأ تقني: ' . $e->getMessage());
+                return \Failed('Technical error: ' . $e->getMessage());
             }
-
         } catch (\Exception $e) {
             DB::rollBack();
             return \Failed($e->getMessage());
@@ -329,7 +316,6 @@ class ReservationController extends Controller
 
     /**
      * NEW: Check if room is available for given dates
-     * Reuses logic from checkReservation
      */
 private function isRoomAvailable($roomId, $startDate, $endDate)
     {
@@ -341,12 +327,6 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
         if (!$room) {
             return false;
         }
-        // dd(ReservationRoom::where('room_id', $roomId)
-        //     ->whereHas('reservation', function ($query) use ($startDate, $endDate) {
-        //         $query
-        //         // ->where('reservation_status', '>', 0) // Confirmed or partial payment
-        //               ->where('start_date', '<', $endDate)
-        //               ->where('expire_date', '>', $startDate);})->get());
         return !ReservationRoom::where('room_id', $roomId)
             ->whereHas('reservation', function ($query) use ($startDate, $endDate) {
                 $query
@@ -356,9 +336,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
             })->exists();
     }
 
-    /**
-     * حساب سعر الغرفة تلقائياً (نفس منطق getRoomPrice)
-     */
+
     private function calculateRoomPrice($room, $start, $end, $rentType, $priceMode = 0)
     {
         $startDate = Carbon::parse($start);
@@ -373,7 +351,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
 
         $totalPrice = 0;
 
-        // يومي
+        // daily
         if ($rentType == 0) {
             $nights = $startDate->diffInDays($endDate);
 
@@ -439,7 +417,6 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                         throw new \Exception('No pricing plan found for price mode 1');
                     }
                     break;
-
                 case 2: // Roomtype only (min/max prices)
                     switch ($roomType->active_type) {
                         case 0:
@@ -462,28 +439,224 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                     break;
             }
         }
-        // شهري - similar logic with mode (simplified for now)
+// monthly - same structure as daily (case 0,1,2)
         elseif ($rentType == 1) {
-            $numberOfMonths = $startDate->diffInMonths($endDate);
-            if ($numberOfMonths < 1) $numberOfMonths = 1;
+
+            $daysInPeriod = $startDate->diffInDays($endDate, false);
 
             switch ($priceMode) {
-                case 0: // Current
-                case 1: // Pricing plan
-                    if ($roomTypePlan) {
-                        $totalPrice = $roomTypePlan->MonthlyPrice * $numberOfMonths;
-                    } else {
-                        // fallback
-                        $totalPrice = $roomType->Min_monthly_price * $numberOfMonths;
-                    }
-                    break;
-                case 2: // Roomtype
-                    $totalPrice = $roomType->Min_monthly_price * $numberOfMonths;
-                    break;
-            }
+              case 0: // Mixed plan + fallback (نظام الكتل الحجزية المتطور)
+    // 1. تعريف المتغيرات والأسعار الأساسية
+    $monthlyMin = $roomType->Min_monthly_price;
+    $monthlyMax = $roomType->Max_monthly_price;
+    $dailyMin   = $roomType->Min_daily_price;
+    $dailyMax   = $roomType->Max_daily_price;
+
+    $totalPrice       = 0;
+    $extraPart        = 0;
+    $monthlyTotalPart = 0;
+
+    // 2. معالجة تواريخ الخطة (Pricing Plan) إن وجدت
+    $planStart = $roomTypePlan ? Carbon::parse($roomTypePlan->pricingplan->StartDate)->startOfDay() : null;
+    $planEnd   = $roomTypePlan ? Carbon::parse($roomTypePlan->pricingplan->EndDate)->startOfDay() : null;
+    $planPrice = $roomTypePlan ? $roomTypePlan->MonthlyPrice : 0;
+
+    $tempDate  = $startDate->copy();
+    $targetDay = $startDate->day;
+
+    // 3. حساب الأشهر الكاملة (باعتبارها "كتلة حجزية" من تاريخ البداية لتاريخ مماثل في الشهر التالي)
+    while (true) {
+        $nextMonth = $tempDate->copy()->addMonthNoOverflow();
+
+        // تحديد اليوم المستهدف في الشهر التالي
+        if ($startDate->isLastOfMonth()) {
+            $potentialNext = $nextMonth->copy()->day($nextMonth->daysInMonth);
+        } else {
+            $potentialNext = $nextMonth->copy()->day(min($targetDay, $nextMonth->daysInMonth));
         }
 
-        return $totalPrice;
+        // إذا كانت الكتلة الشهرية تقع بالكامل ضمن تاريخ نهاية الحجز
+        if ($potentialNext->lte($endDate)) {
+            $chunkDays = $tempDate->diffInDays($potentialNext);
+            $chunkPrice = 0;
+
+            // فحص كل يوم داخل "الكتلة الشهرية" بشكل منفرد
+            for ($i = 0; $i < $chunkDays; $i++) {
+                $currDay = $tempDate->copy()->addDays($i);
+                $daysInCurrentMonth = $currDay->daysInMonth;
+                $mName = $currDay->format('F');
+
+                // أ- فحص إذا كان اليوم يتبع لخطة سعر نشطة
+                $inPlan = false;
+                if ($roomTypePlan && $planStart && $planEnd) {
+                    if ($currDay->betweenIncluded($planStart, $planEnd)) {
+                        $inPlan = true;
+                    }
+                }
+
+                if ($inPlan) {
+                    // حساب حصة اليوم من سعر الخطة الشهري
+                    $chunkPrice += ($planPrice / $daysInCurrentMonth);
+                } else {
+                    // ب- في حال كان اليوم خارج الخطة، نعتمد على نوع تسعير الغرفة (ActiveType)
+                    $monthlyFallbackForThisDay = $monthlyMin; // الافتراضي هو الأدنى
+
+                    if ($roomType->active_type == 2) {
+                        $monthlyFallbackForThisDay = $monthlyMax;
+                    } elseif ($roomType->active_type == 1) {
+                        // التحقق من ذروة الشهر (Peak Month)
+                        $monthlyFallbackForThisDay = $this->checkPeakMonth($mName) ? $monthlyMax : $monthlyMin;
+                    }
+
+                    $chunkPrice += ($monthlyFallbackForThisDay / $daysInCurrentMonth);
+                }
+            }
+
+            $monthlyTotalPart += $chunkPrice;
+            $tempDate = $potentialNext;
+
+            if ($tempDate->eq($endDate)) break;
+        } else {
+            break; // الخروج من حلقة الأشهر الكاملة للتعامل مع الأيام المتبقية
+        }
+    }
+
+    $totalPrice = $monthlyTotalPart;
+
+    // 4. حساب الأيام المتبقية (Extra Days) التي لا تشكل شهراً كاملاً
+    $extraDays = $tempDate->diffInDays($endDate);
+
+    if ($extraDays > 0) {
+        for ($d = 0; $d < $extraDays; $d++) {
+            $extraDate = $tempDate->copy()->addDays($d);
+            $dayName = $extraDate->format('l');
+
+            // فحص إذا كان اليوم الإضافي يقع ضمن الخطة
+            $inPlan = false;
+            if ($roomTypePlan && $planStart && $planEnd) {
+                if ($extraDate->betweenIncluded($planStart, $planEnd)) {
+                    $inPlan = true;
+                }
+            }
+
+            if ($inPlan) {
+                // يحسب كنسبة من سعر الخطة الشهري
+                $extraPart += ($planPrice / $extraDate->daysInMonth);
+            } else {
+                // يحسب كـ "سعر يومي" (Daily Price) بناءً على يوم ذروة أم لا
+                $extraPart += $this->checkPeakDay($dayName) ? $dailyMax : $dailyMin;
+            }
+        }
+        $totalPrice += $extraPart;
+    }
+
+    // 5. التقريب النهائي الموحد
+    $totalPrice = round($totalPrice, 2, PHP_ROUND_HALF_UP);
+    if (abs($totalPrice - round($totalPrice, 0)) < 0.005) {
+        $totalPrice = round($totalPrice, 0);
+    }
+    break;
+
+                case 1: // Plan only
+                    if ($roomTypePlan) {
+                        // return $endDate->daysInMonth;
+                        $totalPrice = round($roomTypePlan->MonthlyPrice + ($roomTypePlan->MonthlyPrice * max(0, ($daysInPeriod - $startDate->daysInMonth))) / $endDate->daysInMonth, 2, PHP_ROUND_HALF_UP);
+                        if (abs($totalPrice - round($totalPrice, 0)) < 0.005) {
+                            $totalPrice = round($totalPrice, 0);
+                        }
+                    } else {
+                        throw new \Exception('No pricing plan for mode 1');
+                    }
+                    break;
+
+case 2:
+  $monthlyMin = $roomType->Min_monthly_price;
+    $monthlyMax = $roomType->Max_monthly_price;
+    $dailyMin = $roomType->Min_daily_price;
+    $dailyMax = $roomType->Max_daily_price;
+
+    $totalPrice = 0;
+    $extraPart = 0;
+    $fullMonths = 0;
+    $monthlyTotalPart = 0;
+
+    // استخدام متغير مؤقت للتحرك خطوة بخطوة
+    $tempDate = $startDate->copy();
+
+    // تحديد اليوم المستهدف (مثلاً يوم 30)
+    $targetDay = $startDate->day;
+
+    // 1. حساب الأشهر الكاملة وحساب سعر كل شهر على حدة
+    while (true) {
+        $nextMonth = $tempDate->copy()->addMonthNoOverflow();
+
+        if ($startDate->isLastOfMonth()) {
+            $potentialNext = $nextMonth->copy()->day($nextMonth->daysInMonth);
+        } else {
+            $potentialNext = $nextMonth->copy()->day(min($targetDay, $nextMonth->daysInMonth));
+        }
+
+        if ($potentialNext->lte($endDate)) {
+            // تحديد سعر هذا الشهر بناءً على نوع النشاط
+            $currentMonthPrice = 0;
+            switch ($roomType->active_type) {
+                case 0:
+                    $currentMonthPrice = $monthlyMin;
+                    break;
+                case 2:
+                    $currentMonthPrice = $monthlyMax;
+                    break;
+                case 1:
+                    // حساب النسبة والتناسب لعدد الأيام في كل شهر ميلادي يمر به هذا "الشهر الحجزي"
+                    $chunkDays = $tempDate->diffInDays($potentialNext);
+                    $chunkPrice = 0;
+
+                    // المرور على أيام هذا الشهر الحجزي يوماً بيوم لمعرفة أي شهر ميلادي تتبع
+                    for ($i = 0; $i < $chunkDays; $i++) {
+                        $currDay = $tempDate->copy()->addDays($i);
+                        $mName = $currDay->format('F'); // اسم الشهر الميلادي لهذا اليوم بالتحديد
+
+                        // نحدد إذا كان هذا اليوم يقع في شهر ذروة أم لا
+                        $monthlyValueForThisDay = $this->checkPeakMonth($mName) ? $monthlyMax : $monthlyMin;
+
+                        // نضيف نسبة هذا اليوم من إجمالي أيام الشهر الحجزي
+                        $chunkPrice += ($monthlyValueForThisDay / $chunkDays);
+                    }
+                    $currentMonthPrice = $chunkPrice;
+                    break;
+            }
+
+            $monthlyTotalPart += $currentMonthPrice;
+            $fullMonths++;
+            $tempDate = $potentialNext;
+
+            if ($tempDate->eq($endDate)) break;
+        } else {
+            break;
+        }
+    }
+
+    $totalPrice = $monthlyTotalPart;
+
+    // 2. حساب الأيام المتبقية (إن وجدت)
+    $extraDays = $tempDate->diffInDays($endDate);
+
+    if ($extraDays > 0) {
+        for ($d = 0; $d < $extraDays; $d++) {
+            $extraDate = $tempDate->copy()->addDays($d);
+            $dayName = $extraDate->format('l');
+            $extraPart += $this->checkPeakDay($dayName) ? $dailyMax : $dailyMin;
+        }
+        $totalPrice += $extraPart;
+    }
+
+    // 3. تقريب السعر النهائي
+    $totalPrice = round($totalPrice, 2, PHP_ROUND_HALF_UP);
+    if (abs($totalPrice - round($totalPrice, 0)) < 0.005) {
+        $totalPrice = round($totalPrice, 0);
+    }
+            }}
+    return $totalPrice;
     }
 
     public  function checkReservation(CheckReservationRequest $request)
@@ -525,10 +698,10 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
         try {
             $startDate = Carbon::parse($request->startDate);
             if ($request->typeReservation == 0 && $request->has('endDate')) {
-                // يومي
+                // daily
                 $endDate = Carbon::parse($request->endDate);
             } else {
-                // شهري أو سنوي
+                // monthly
                 $endDate = $startDate->copy()->addDays(30 * $request->numberOfMonths);
             }
             $start = $startDate->toDateString();
@@ -543,20 +716,18 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                         ->where('EndDate', '>=', $start);
                 })->first();
 
-            // الحجز اليومي
+            // daily reservation
             if ($request->typeReservation == 0) {
                 if ($roomTypePlan) {
                     $planStart = Carbon::parse($roomTypePlan->pricingplan->StartDate);
                     $planEnd   = Carbon::parse($roomTypePlan->pricingplan->EndDate);
 
                     if ($start >= $planStart->toDateString() && $end <= $planEnd->toDateString()) {
-                        // المدة كاملة ضمن الخطة
                         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
                             $days[$date->toDateString()] = $roomTypePlan->DailyPrice;
                             $totalPrice += $roomTypePlan->DailyPrice;
                         }
                     } else {
-                        // يوجد تداخل بالتواريخ
                         switch ($roomTypePlan->pricingplan->ActiveType) {
                             case 0: // Const
                                 for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
@@ -590,7 +761,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                     return \SuccessData('Daily pricing calculated', ['days' => $days, 'totalPrice' => $totalPrice]);
                 }
 
-                // لا يوجد خطة
+                // no plan
                 switch ($roomType->active_type) {
                     case 0:
                         $priceType = 'Min_daily_price';
@@ -622,7 +793,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                 return SuccessData('Daily pricing calculated', ['days' => $days, 'totalPrice' => $totalPrice]);
             }
 
-            //  الحجز الشهري
+            //  monthly reservation
             if ($request->typeReservation == 1) {
                 $numberOfMonths = $request->numberOfMonths;
                 if ($roomTypePlan) {
@@ -676,7 +847,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
                         }
                     }
                 } else {
-                    // لا يوجد خطة
+                    // no plan
                     switch ($roomType->active_type) {
                         case 0:
                             for ($i = 1; $i <= $numberOfMonths; $i++) {

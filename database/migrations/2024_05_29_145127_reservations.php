@@ -14,10 +14,6 @@ return new class extends Migration {
             $table->id();
             // $table->integer('reservation_number')->unique()->comment('Unique reservation number');
             $table->integer('client_id')->comment('ID of the client making the reservation');
-            // $table->integer('room_id')->nullable()->comment('ID of the room being reserved');
-            // $table->tinyInteger('room_suite')->default(0)->comment('0 for room, 1 for suite');
-            // $table->tinyInteger('multi_room')->default(0)->comment('0 for single room, 1 for multiple rooms');
-            // $table->string('additional_rooms_ids')->comment('the additional rooms ids seperated by "-" ');
             $table->date('start_date')->default(today())->comment('the reservation start date');
             $table->integer('nights')->default(1)->comment('the reservation nights');
             $table->date('expire_date')->comment('the reservation expire date');

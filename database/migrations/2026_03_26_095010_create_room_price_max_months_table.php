@@ -11,11 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('room_price_max_days', function (Blueprint $table) {
+        Schema::create('room_price_max_months', function (Blueprint $table) {
             $table->id();
-$table->foreignId('room_price_id')->constrained('room_prices')->onDelete('cascade');
-            $table->integer('day');
-
+            $table->foreignId('room_price_id')->constrained('room_prices')->onDelete('cascade');
+            $table->integer('month');
             $table->timestamps();
         });
     }
@@ -25,6 +24,7 @@ $table->foreignId('room_price_id')->constrained('room_prices')->onDelete('cascad
      */
     public function down(): void
     {
-        Schema::dropIfExists('room_price_max_days');
+        Schema::dropIfExists('room_price_max_months');
     }
 };
+
