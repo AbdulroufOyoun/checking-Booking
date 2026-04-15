@@ -66,7 +66,7 @@ public function makeReservation(MakeReservationRequest $request)
                     }
 
                     // حساب السعر بناءً على المنطق المطور (Case 0, 1, 2)
-                    $roomPrice = $this->calculateRoomPrice(
+                    return $roomPrice = $this->calculateRoomPrice(
                         $room,
                         $startDate->toDateString(),
                         $endDate->toDateString(),
@@ -92,8 +92,7 @@ public function makeReservation(MakeReservationRequest $request)
         $extras = $request->extras ?? 0;
         $penalties = $request->penalties ?? 0;
         $subtotal = $totalBasePrice - $discount + $extras + $penalties;
-$taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);
-        $total = $subtotal + $taxes;
+$taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtotal + $taxes;
 
         // 4. إنشاء سجل الحجز الرئيسي
         $reservation = Reservation::create([
@@ -445,85 +444,81 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
             $daysInPeriod = $startDate->diffInDays($endDate, false);
 
             switch ($priceMode) {
-              case 0: // Mixed plan + fallback (نظام الكتل الحجزية المتطور)
-    // 1. تعريف المتغيرات والأسعار الأساسية
-    $monthlyMin = $roomType->Min_monthly_price;
-    $monthlyMax = $roomType->Max_monthly_price;
-    $dailyMin   = $roomType->Min_daily_price;
-    $dailyMax   = $roomType->Max_daily_price;
+           case 0: // منطق تجميع الأيام المتبقية لتكوين شهر كامل (Bridge Logic)
+            $monthlyMin = $roomType->Min_monthly_price;
+            $monthlyMax = $roomType->Max_monthly_price;
+            $dailyMin   = $roomType->Min_daily_price;
+            $dailyMax   = $roomType->Max_daily_price;
 
-    $totalPrice       = 0;
-    $extraPart        = 0;
-    $monthlyTotalPart = 0;
+            $totalPrice = 0;
+            $startDate = Carbon::parse($start);
+            $endDate = Carbon::parse($end);
 
-    // 2. معالجة تواريخ الخطة (Pricing Plan) إن وجدت
-    $planStart = $roomTypePlan ? Carbon::parse($roomTypePlan->pricingplan->StartDate)->startOfDay() : null;
-    $planEnd   = $roomTypePlan ? Carbon::parse($roomTypePlan->pricingplan->EndDate)->startOfDay() : null;
-    $planPrice = $roomTypePlan ? $roomTypePlan->MonthlyPrice : 0;
+            // 1. حساب إجمالي الأيام وعدد الأشهر الكاملة الممكنة في هذه الفترة
+            $totalFullMonths = $startDate->diffInMonths($endDate);
 
-    $tempDate  = $startDate->copy();
-    $targetDay = $startDate->day;
+            // 2. توزيع سعر الأشهر الكاملة بنظام النسبة والتناسب (مثل case 1 في وضع priceMode 2)
+            $tempDate = $startDate->copy();
+            for ($m = 0; $m < $totalFullMonths; $m++) {
+                $nextMonthDate = $tempDate->copy()->addMonthNoOverflow();
+                $chunkDays = $tempDate->diffInDays($nextMonthDate);
+                $chunkPrice = 0;
 
-    // 3. حساب الأشهر الكاملة (باعتبارها "كتلة حجزية" من تاريخ البداية لتاريخ مماثل في الشهر التالي)
-    while (true) {
-        $nextMonth = $tempDate->copy()->addMonthNoOverflow();
+                // المرور على أيام هذا الشهر الحجزي يوماً بيوم لمعرفة أي شهر ميلادي تتبع
+                for ($i = 0; $i < $chunkDays; $i++) {
+                    // إضافة 1 للقفز عن يوم الدخول وحساب ليالي المبيت
+                    $currDay = $tempDate->copy()->addDays($i + 1);
+                    $mName = $currDay->format('F');
 
-        // تحديد اليوم المستهدف في الشهر التالي
-        if ($startDate->isLastOfMonth()) {
-            $potentialNext = $nextMonth->copy()->day($nextMonth->daysInMonth);
-        } else {
-            $potentialNext = $nextMonth->copy()->day(min($targetDay, $nextMonth->daysInMonth));
-        }
-
-        // إذا كانت الكتلة الشهرية تقع بالكامل ضمن تاريخ نهاية الحجز
-        if ($potentialNext->lte($endDate)) {
-            $chunkDays = $tempDate->diffInDays($potentialNext);
-            $chunkPrice = 0;
-
-            // فحص كل يوم داخل "الكتلة الشهرية" بشكل منفرد
-            for ($i = 0; $i < $chunkDays; $i++) {
-                $currDay = $tempDate->copy()->addDays($i);
-                $daysInCurrentMonth = $currDay->daysInMonth;
-                $mName = $currDay->format('F');
-
-                // أ- فحص إذا كان اليوم يتبع لخطة سعر نشطة
-                $inPlan = false;
-                if ($roomTypePlan && $planStart && $planEnd) {
-                    if ($currDay->betweenIncluded($planStart, $planEnd)) {
-                        $inPlan = true;
-                    }
+                    $monthlyValueForThisDay = $this->checkPeakMonth($mName) ? $monthlyMax : $monthlyMin;
+                    $chunkPrice += ($monthlyValueForThisDay / $chunkDays);
                 }
 
-                if ($inPlan) {
-                    // حساب حصة اليوم من سعر الخطة الشهري
-                    $chunkPrice += ($planPrice / $daysInCurrentMonth);
+                $totalPrice += $chunkPrice;
+                $tempDate = $nextMonthDate;
+            }
+
+            // 3. حساب الأيام المتبقية (التي لم تكمل شهراً إضافياً)
+            $remainingDays = $tempDate->diffInDays($endDate);
+
+            if ($remainingDays > 0) {
+                $extraPartPrice = 0;
+                for ($d = 0; $d < $remainingDays; $d++) {
+                    // تعديل هنا أيضاً بإضافة 1 لحساب الليالي بشكل صحيح
+                    $currDay = $tempDate->copy()->addDays($d + 1);
+                    $extraPartPrice += $this->checkPeakDay($currDay->format('l')) ? $dailyMax : $dailyMin;
+                }
+
+                // منطق الحماية: حساب تكلفة شهر افتراضي جديد بنفس طريقة النسبة والتناسب
+                $potentialNextMonth = $tempDate->copy()->addMonthNoOverflow();
+                $potentialDays = $tempDate->diffInDays($potentialNextMonth);
+                $potentialMonthPrice = 0;
+
+                for ($i = 0; $i < $potentialDays; $i++) {
+                    $currDay = $tempDate->copy()->addDays($i + 1);
+                    $mName = $currDay->format('F');
+                    $monthlyValueForThisDay = $this->checkPeakMonth($mName) ? $monthlyMax : $monthlyMin;
+                    $potentialMonthPrice += ($monthlyValueForThisDay / $potentialDays);
+                }
+
+                // إذا كانت تكلفة الأيام الزائدة أعلى من تكلفة الشهر الافتراضي، نأخذ سعر الشهر
+                if ($extraPartPrice > $potentialMonthPrice) {
+                    $totalPrice += $potentialMonthPrice;
                 } else {
-                    // ب- في حال كان اليوم خارج الخطة، نعتمد على نوع تسعير الغرفة (ActiveType)
-                    $monthlyFallbackForThisDay = $monthlyMin; // الافتراضي هو الأدنى
-
-                    if ($roomType->active_type == 2) {
-                        $monthlyFallbackForThisDay = $monthlyMax;
-                    } elseif ($roomType->active_type == 1) {
-                        // التحقق من ذروة الشهر (Peak Month)
-                        $monthlyFallbackForThisDay = $this->checkPeakMonth($mName) ? $monthlyMax : $monthlyMin;
-                    }
-
-                    $chunkPrice += ($monthlyFallbackForThisDay / $daysInCurrentMonth);
+                    $totalPrice += $extraPartPrice;
                 }
             }
 
-            $monthlyTotalPart += $chunkPrice;
-            $tempDate = $potentialNext;
-
-            if ($tempDate->eq($endDate)) break;
-        } else {
-            break; // الخروج من حلقة الأشهر الكاملة للتعامل مع الأيام المتبقية
-        }
-    }
+            // 4. التقريب النهائي الصارم لمنع الكسور العشرية
+            $totalPrice = round($totalPrice, 2, PHP_ROUND_HALF_UP);
+            if (abs($totalPrice - round($totalPrice, 0)) < 0.005) {
+                $totalPrice = round($totalPrice, 0);
+            }
+            break;
 
     $totalPrice = $monthlyTotalPart;
 
-    // 4. حساب الأيام المتبقية (Extra Days) التي لا تشكل شهراً كاملاً
+    // 4. حساب الأيام المتبقية (Extra Days) - هنا فقط نستخدم الحساب اليومي أو النسبة
     $extraDays = $tempDate->diffInDays($endDate);
 
     if ($extraDays > 0) {
@@ -531,7 +526,6 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
             $extraDate = $tempDate->copy()->addDays($d);
             $dayName = $extraDate->format('l');
 
-            // فحص إذا كان اليوم الإضافي يقع ضمن الخطة
             $inPlan = false;
             if ($roomTypePlan && $planStart && $planEnd) {
                 if ($extraDate->betweenIncluded($planStart, $planEnd)) {
@@ -540,19 +534,19 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
             }
 
             if ($inPlan) {
-                // يحسب كنسبة من سعر الخطة الشهري
+                // الأيام الزائدة في الخطة تحسب كنسبة (هنا الكسور ضرورية للعدالة)
                 $extraPart += ($planPrice / $extraDate->daysInMonth);
             } else {
-                // يحسب كـ "سعر يومي" (Daily Price) بناءً على يوم ذروة أم لا
+                // الأيام الزائدة خارج الخطة تحسب بسعر اليومي الثابت (أرقام صحيحة)
                 $extraPart += $this->checkPeakDay($dayName) ? $dailyMax : $dailyMin;
             }
         }
         $totalPrice += $extraPart;
     }
 
-    // 5. التقريب النهائي الموحد
+    // 5. التقريب النهائي الموحد لقتل أي فواصل مجهرية ناتجة عن "النسبة" في الأيام الزائدة
     $totalPrice = round($totalPrice, 2, PHP_ROUND_HALF_UP);
-    if (abs($totalPrice - round($totalPrice, 0)) < 0.005) {
+    if (abs($totalPrice - round($totalPrice, 0)) < 0.01) {
         $totalPrice = round($totalPrice, 0);
     }
     break;
@@ -613,7 +607,7 @@ case 2:
 
                     // المرور على أيام هذا الشهر الحجزي يوماً بيوم لمعرفة أي شهر ميلادي تتبع
                     for ($i = 0; $i < $chunkDays; $i++) {
-                        $currDay = $tempDate->copy()->addDays($i);
+                        $currDay = $tempDate->copy()->addDays($i+1);
                         $mName = $currDay->format('F'); // اسم الشهر الميلادي لهذا اليوم بالتحديد
 
                         // نحدد إذا كان هذا اليوم يقع في شهر ذروة أم لا
@@ -649,6 +643,7 @@ case 2:
         }
         $totalPrice += $extraPart;
     }
+
 
     // 3. تقريب السعر النهائي
     $totalPrice = round($totalPrice, 2, PHP_ROUND_HALF_UP);
