@@ -55,7 +55,6 @@ class MakeReservationRequest extends FormRequest
                     $startDate = Carbon::parse($this->input('start_date'))->startOfDay();
                     $expireDate = Carbon::parse($this->input('expire_date'))->startOfDay();
 
-                    // استخدام addMonthNoOverflow لضمان حساب الشهر بدقة دون تجاوز الأيام في الأشهر القصيرة
                     $minExpireDate = $startDate->copy()->addMonthNoOverflow();
 
                     if ($expireDate->lessThan($minExpireDate)) {
