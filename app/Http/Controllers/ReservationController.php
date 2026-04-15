@@ -523,7 +523,7 @@ private function isRoomAvailable($roomId, $startDate, $endDate)
 
     if ($extraDays > 0) {
         for ($d = 0; $d < $extraDays; $d++) {
-            $extraDate = $tempDate->copy()->addDays($d);
+            $extraDate = $tempDate->copy()->addDays($d+1);
             $dayName = $extraDate->format('l');
 
             $inPlan = false;
@@ -568,7 +568,6 @@ case 2:
     $monthlyMax = $roomType->Max_monthly_price;
     $dailyMin = $roomType->Min_daily_price;
     $dailyMax = $roomType->Max_daily_price;
-
     $totalPrice = 0;
     $extraPart = 0;
     $fullMonths = 0;
@@ -637,7 +636,7 @@ case 2:
 
     if ($extraDays > 0) {
         for ($d = 0; $d < $extraDays; $d++) {
-            $extraDate = $tempDate->copy()->addDays($d);
+            $extraDate = $tempDate->copy()->addDays($d+1);
             $dayName = $extraDate->format('l');
             $extraPart += $this->checkPeakDay($dayName) ? $dailyMax : $dailyMin;
         }
