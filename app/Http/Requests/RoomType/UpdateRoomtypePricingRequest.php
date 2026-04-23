@@ -25,7 +25,6 @@ class UpdateRoomtypePricingRequest extends FormRequest
             'EndDate'        => 'required|date|after_or_equal:StartDate',
             'DailyPrice'     => 'required|numeric|min:0',
             'MonthlyPrice'   => 'required|numeric|min:0',
-            'YearlyPrice'    => 'required|numeric|min:0',
             'ActiveType'     => 'required|numeric|in:0,1,2',
         ];
     }

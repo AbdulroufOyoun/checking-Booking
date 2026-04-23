@@ -28,8 +28,6 @@ class RoomTypesController extends Controller
                 'Min_daily_price'   => $request->Min_daily_price,
                 'Max_monthly_price' => $request->Max_monthly_price ?? 0,
                 'Min_monthly_price' => $request->Min_monthly_price,
-                'Max_yearly_price'  => $request->Max_yearly_price ?? 0,
-                'Min_yearly_price'  => $request->Min_yearly_price,
                 'active_type'       => $request->active_type,
             ]);
             return SuccessData('Room type added successfully', $roomType);
@@ -61,8 +59,6 @@ class RoomTypesController extends Controller
                 'Min_daily_price'   => $request->Min_daily_price,
                 'Max_monthly_price' => $request->Max_monthly_price ?? 0,
                 'Min_monthly_price' => $request->Min_monthly_price,
-                'Max_yearly_price'  => $request->Max_yearly_price  ?? 0,
-                'Min_yearly_price'  => $request->Min_yearly_price,
                 'active_type'       => $request->active_type,
             ]);
 
@@ -109,7 +105,6 @@ class RoomTypesController extends Controller
                     'pricingplan_ActiveType' => $item->pricingplan?->ActiveType,
                     'DailyPrice' => $item->DailyPrice,
                     'MonthlyPrice' => $item->MonthlyPrice,
-                    'YearlyPrice' => $item->YearlyPrice,
                 ];
             });
             return SuccessData('Pricing plans retrieved successfully', $formatted);
@@ -136,7 +131,6 @@ class RoomTypesController extends Controller
                 'pricingplan_id' => $pricingPlan->id,
                 'DailyPrice' => $request->DailyPrice,
                 'MonthlyPrice' => $request->MonthlyPrice,
-                'YearlyPrice' => $request->YearlyPrice,
             ]);
 
             DB::commit();
@@ -153,7 +147,6 @@ class RoomTypesController extends Controller
                 'pricingplan_ActiveType' => $pricingPlan->ActiveType,
                 'DailyPrice' => $roomTypePricing->DailyPrice,
                 'MonthlyPrice' => $roomTypePricing->MonthlyPrice,
-                'YearlyPrice' => $roomTypePricing->YearlyPrice,
             ];
             return SuccessData('Pricing plan added successfully', $data);
         } catch (\Exception $e) {
@@ -173,7 +166,6 @@ class RoomTypesController extends Controller
                 'pricingplan_id' => $pricingPlan->id,
                 'DailyPrice' => $request->DailyPrice,
                 'MonthlyPrice' => $request->MonthlyPrice,
-                'YearlyPrice' => $request->YearlyPrice ?? 0,
             ]);
 
             DB::commit();
@@ -191,7 +183,6 @@ class RoomTypesController extends Controller
                 'pricingplan_ActiveType' => $pricingPlan->ActiveType,
                 'DailyPrice' => $roomTypePricing->DailyPrice,
                 'MonthlyPrice' => $roomTypePricing->MonthlyPrice,
-                'YearlyPrice' => $roomTypePricing->YearlyPrice,
             ];
             return SuccessData('Roomtype pricing plan added successfully', $data);
         } catch (\Exception $e) {
@@ -218,7 +209,6 @@ class RoomTypesController extends Controller
                 'pricingplan_id' => $pricingPlan->id,
                 'DailyPrice'     => $request->DailyPrice,
                 'MonthlyPrice'   => $request->MonthlyPrice,
-                'YearlyPrice'    => $request->YearlyPrice,
             ]);
             DB::commit();
             $data = [
@@ -234,7 +224,6 @@ class RoomTypesController extends Controller
                 'pricingplan_ActiveType' => $pricingPlan->ActiveType,
                 'DailyPrice'            => $roomTypePricing->DailyPrice,
                 'MonthlyPrice'          => $roomTypePricing->MonthlyPrice,
-                'YearlyPrice'           => $roomTypePricing->YearlyPrice,
             ];
             return SuccessData('Pricing plan updated successfully', $data);
         } catch (\Exception $e) {

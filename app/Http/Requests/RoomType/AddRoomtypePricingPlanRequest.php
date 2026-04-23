@@ -20,7 +20,6 @@ class AddRoomtypePricingPlanRequest extends FormRequest
             'roomtype_id' => 'required|exists:room_types,id',
             'DailyPrice' => 'required|numeric|min:0',
             'MonthlyPrice' => 'required|numeric|min:0',
-            'YearlyPrice' => 'required|numeric|min:0',
         ];
     }
 

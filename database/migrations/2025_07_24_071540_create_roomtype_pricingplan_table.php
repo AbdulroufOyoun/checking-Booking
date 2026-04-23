@@ -21,7 +21,6 @@ class CreateRoomtypePricingplanTable extends Migration
             $table->foreign('pricingplan_id')->references('id')->on('pricing_plans');
             $table->double('DailyPrice');
             $table->double('MonthlyPrice');
-            $table->double('YearlyPrice');
             $table->timestamps();
         });
     }

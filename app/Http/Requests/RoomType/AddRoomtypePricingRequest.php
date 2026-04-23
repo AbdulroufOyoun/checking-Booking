@@ -24,7 +24,6 @@ class AddRoomtypePricingRequest extends FormRequest
             'ActiveType' => 'required|integer|in:0,1,2',
             'DailyPrice' => 'required|numeric|min:0',
             'MonthlyPrice' => 'required|numeric|min:0',
-            'YearlyPrice' => 'required|numeric|min:0',
         ];
     }
 

@@ -19,8 +19,6 @@ return new class extends Migration {
             $table->double('Min_daily_price')->default(0)->comment('Minimum daily price for the room type');
             $table->double('Max_monthly_price')->default(0)->comment('Maximum monthly price for the room type');
             $table->double('Min_monthly_price')->default(0)->comment('Minimum monthly price for the room type');
-            $table->double('Max_yearly_price')->default(0)->comment('Maximum yearly price for the room type');
-            $table->double('Min_yearly_price')->default(0)->comment('Minimum yearly price for the room type');
             $table->tinyInteger('active_type')->default(1)->comment('Type of activity: 0 for inactive, 1 for as per day , 2 for all max');
             $table->timestamps();
         });

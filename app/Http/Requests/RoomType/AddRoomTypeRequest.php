@@ -25,14 +25,11 @@ class AddRoomTypeRequest extends FormRequest
         if ($this->active_type == 0) {
             $rules['Min_daily_price'] = 'required|numeric|min:1';
             $rules['Min_monthly_price'] = 'required|numeric|min:1';
-            $rules['Min_yearly_price'] = 'required|numeric|min:1';
         } else {
             $rules['Min_daily_price'] = 'required|numeric|min:1';
             $rules['Max_daily_price'] = 'required|numeric|min:1';
             $rules['Min_monthly_price'] = 'required|numeric|min:1';
             $rules['Max_monthly_price'] = 'required|numeric|min:1';
-            $rules['Min_yearly_price'] = 'required|numeric|min:1';
-            $rules['Max_yearly_price'] = 'required|numeric|min:1';
         }
 
         return $rules;

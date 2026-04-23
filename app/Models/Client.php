@@ -21,4 +21,9 @@ class Client extends Model
         'guest_type',
         'nationality',
     ];
+
+    public function notes()
+    {
+        return $this->hasMany(ClientNote::class);
+    }
 }

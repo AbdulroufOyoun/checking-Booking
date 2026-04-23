@@ -28,6 +28,7 @@ use App\Http\Controllers\UsersController;
 use App\Http\Controllers\EarningController;
 use App\Http\Controllers\RevenueController;
 use App\Http\Controllers\RefundPolicyController;
+use App\Http\Controllers\ClientNoteController;
 
 Route::post('login', [UsersController::class, 'login']);
 
@@ -40,6 +41,7 @@ Route::group(['middleware' => ['auth:api']], function () {
 //Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
 Route::get('buildings', [BuildingsController::class, 'index']);
 Route::post('updateBuilding', [BuildingsController::class, 'update']);
+Route::post('building', [BuildingsController::class, 'store']);
 Route::delete('building', [BuildingsController::class, 'destroy']);
 
 //=========================================Floor=============================================
@@ -151,6 +153,7 @@ Route::post('/addReservationSource', [ReservationSourcesController::class, 'stor
 Route::post('/updateReservationSource', [ReservationSourcesController::class, 'update']);
 Route::delete('/deleteReservationSource', [ReservationSourcesController::class, 'destroy']);
 //=====================================Clients====================================================
+Route::get('/getClient', [ClientsController::class, 'index']);
 Route::post('/addClient', [ClientsController::class, 'store']);
 Route::get('/getClientBy', [ClientsController::class, 'getBy']);
 //=====================================Department=================================================
@@ -190,6 +193,8 @@ Route::delete('removeClientClassification', [ClientClassificationsController::cl
 
 
 //=========================================Reservation=============================================
+Route::get('reservations', [ReservationController::class, 'index']);
+Route::get('reservations/client', [ReservationController::class, 'getByClientId']);
 Route::post('makeReservation', [ReservationController::class, 'makeReservation']);
 Route::get('checkReservation', [ReservationController::class, 'checkReservation']);
 Route::post('getRoomPrice', [ReservationController::class, 'getRoomPrice']);
@@ -211,6 +216,11 @@ Route::get('revenue/roomtype/{entity_id}', [RevenueController::class, 'getRoomTy
 
 Route::apiResource('refund-policies', RefundPolicyController::class);
 Route::delete('refund-policies', [RefundPolicyController::class, 'destroy']);
+
+Route::get('client-notes', [ClientNoteController::class, 'index']);
+Route::post('client-notes', [ClientNoteController::class, 'store']);
+Route::put('client-notes/{id}', [ClientNoteController::class, 'update']);
+Route::delete('client-notes/{id}', [ClientNoteController::class, 'destroy']);
 
     });
 

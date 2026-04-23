@@ -15,6 +15,7 @@ use App\Models\ReservationPay;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\Reservation\MakeReservationRequest;
+use App\Http\Requests\GetByClientIdRequest;
 use App\Http\Requests\Reservation\CheckReservationRequest;
 use App\Http\Requests\Reservation\GetRoomPriceRequest;
 use App\Http\Requests\Reservation\GetReservationByDateRequest;
@@ -26,6 +27,36 @@ use Carbon\CarbonPeriod;
 
 class ReservationController extends Controller
 {
+    public function index()
+    {
+        try {
+            $perPage = \returnPerPage();
+            $reservations = Reservation::with(['client', 'reservationRooms.room.roomType', 'payments'])
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage);
+            return \Pagination($reservations);
+        } catch (\Exception $e) {
+            return \Failed($e->getMessage());
+        }
+    }
+
+    public function getByClientId(GetByClientIdRequest $request)
+    {
+        try {
+            $perPage = \returnPerPage();
+            $clientId = $request->client_id;
+
+            $reservations = Reservation::with(['client', 'reservationRooms.room.roomType', 'payments'])
+                ->where('client_id', $clientId)
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage);
+
+            return \Pagination($reservations);
+        } catch (\Exception $e) {
+            return \Failed($e->getMessage());
+        }
+    }
+
 public function makeReservation(MakeReservationRequest $request)
 {
     try {
