@@ -18,7 +18,6 @@ return new class extends Migration
             $table->timestamps();
             $table->unique(['user_id', 'permission_id'], 'unique_user_permission');
             $table->comment("Table to store user permissions for various actions");
-            $table->timestamps();
 
         });
     }

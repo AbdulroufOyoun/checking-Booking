@@ -14,8 +14,8 @@ return new class extends Migration {
             $table->id();
             $table->string('name');
             $table->string('job_number')->unique()->comment("Unique job number for the user");
-            $table->unsignedBigInteger('jobtitle_id')->comment("Foreign key to user job titles table");
-            $table->unsignedBigInteger('department_id')->comment("Foreign key to user departments table");
+            $table->unsignedBigInteger('jobtitle_id')->nullable()->comment("Foreign key to user job titles table");
+            $table->unsignedBigInteger('department_id')->nullable()->comment("Foreign key to user departments table");
             $table->string('mobile')->unique();
             $table->string('email')->unique();
             $table->unsignedBigInteger('discount_id')->nullable();
