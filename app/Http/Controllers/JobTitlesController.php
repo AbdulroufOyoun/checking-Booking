@@ -25,9 +25,10 @@ class JobTitlesController extends Controller
     {
         try {
             $jobTitle = Job_title::create([
-                'jobtitle' => $request->jobtitle,
+                'name_ar' => $request->name_ar,
+                'name_en' => $request->name_en,
+                'description' => $request->description ?? null,
                 'department_id' => $request->department_id,
-                'active' => $request->active ?? 1,
             ]);
 
             return \SuccessData('Job title added successfully', $jobTitle);
@@ -42,9 +43,10 @@ class JobTitlesController extends Controller
             $jobTitle = Job_title::find($request->id);
 
             $jobTitle->update([
-                'name' => $request->name ?? $jobTitle->name,
+                'name_ar' => $request->name_ar ?? $jobTitle->name_ar,
+                'name_en' => $request->name_en ?? $jobTitle->name_en,
+                'description' => $request->description ?? $jobTitle->description,
                 'department_id' => $request->department_id ?? $jobTitle->department_id,
-                'active' => $request->active ?? $jobTitle->active,
             ]);
 
             return \SuccessData('Job title updated successfully', $jobTitle);

@@ -31,6 +31,8 @@ class AddUserRequest extends FormRequest
             'discount_id'   => 'nullable|numeric|exists:discounts,id',
             'permission_ids' => 'nullable|array',
             'permission_ids.*' => 'numeric|exists:permissions,id',
+            'password'      => 'required|string|min:6',
+            'role_id'       => 'nullable|numeric|exists:roles,id',
         ];
     }
 

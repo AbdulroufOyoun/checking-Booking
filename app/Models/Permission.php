@@ -2,27 +2,19 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Permission\Models\Permission as SpatiePermission;
 
-class Permission extends Model
+class Permission extends SpatiePermission
 {
-    use HasFactory;
-
     protected $fillable = [
-        'name_en',
+        'name',
         'name_ar',
-        'description_en',
-        'description_ar',
-        'active',
+        'guard_name',
+        'category_id',
     ];
-    public $timestamps = false;
 
-
-
-    function userPermissions(): HasMany
+    public function category()
     {
-        return $this->hasMany(User_permission::class);
+        return $this->belongsTo(PermissionCategory::class, 'category_id');
     }
 }

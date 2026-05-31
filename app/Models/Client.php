@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class Client extends Model
 {
-    protected $connection = 'mysql2';
-
     protected $fillable = [
         'first_name',
         'last_name',
@@ -25,5 +23,10 @@ class Client extends Model
     public function notes()
     {
         return $this->hasMany(ClientNote::class);
+    }
+
+    public function classifications()
+    {
+        return $this->hasMany(Client_Classifications::class, 'client_id');
     }
 }

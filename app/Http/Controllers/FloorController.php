@@ -17,11 +17,10 @@ class FloorController extends Controller
     public function index(FloorIndexRequest $request)
     {
         try {
-            $perPage = \returnPerPage();
             $floors = Floor::where('building_id', $request->building_id)
                           ->where('active', 1)
-                          ->paginate($perPage);
-            return \Pagination($floors);
+                          ->get();
+            return SuccessData('Floors fetched successfully', $floors);
         } catch (\Exception $e) {
             return Failed($e->getMessage());
         }

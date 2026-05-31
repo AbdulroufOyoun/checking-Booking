@@ -17,7 +17,8 @@ class UpdateDepartmentRequest extends FormRequest
     {
         return [
             'id' => 'required|numeric|exists:departments,id',
-            'name' => 'nullable|string|max:255',
+            'name_ar' => 'nullable|string|max:255|unique:departments,name_ar,' . $this->id,
+            'name_en' => 'nullable|string|max:255|unique:departments,name_en,' . $this->id,
             'description' => 'nullable|string',
         ];
     }

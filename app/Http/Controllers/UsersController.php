@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Job_title;
 use App\Models\Department;
 use App\Models\User_permission;
+use Spatie\Permission\Models\Role;
 use App\Http\Resources\UserResource;
 use App\Http\Requests\User\AddUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
@@ -67,7 +68,14 @@ class UsersController extends Controller
                 $this->addUserPermission($user->id, $request->permission_ids);
             }
 
-            $user->load(['jobtitle', 'department', 'discount', 'permissions']);
+            if ($request->has('role_id')) {
+                $role = Role::find($request->role_id);
+                if ($role) {
+                    $user->assignRole($role->name);
+                }
+            }
+
+            $user->load(['jobtitle', 'department', 'discount', 'permissions', 'roles']);
             DB::commit();
             return \SuccessData('User added Successfully', new UserResource($user));
         } catch (Exception $e) {
@@ -129,8 +137,10 @@ class UsersController extends Controller
         }
 
         try {
-            $user->update(['active' => !$user->active]);
-            return \Success('User deactivated successfully');
+            $newStatus = !$user->active;
+            $user->update(['active' => $newStatus]);
+            $statusText = $newStatus ? 'activated' : 'deactivated';
+            return \Success("User $statusText successfully");
         } catch (Exception $e) {
             return \Failed($e->getMessage());
         }
@@ -152,22 +162,71 @@ class UsersController extends Controller
         }
     }
 
+    public function getInfoUsers(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 10);
+            $search = $request->input('search');
+
+            $query = User::with(['roles.permissions', 'permissions', 'jobtitle', 'department', 'discount']);
+
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'like', "%$search%")
+                      ->orWhere('email', 'like', "%$search%")
+                      ->orWhere('job_number', 'like', "%$search%");
+                });
+            }
+
+            $users = $query->paginate($perPage);
+
+            return \SuccessData('Users retrieved successfully', [
+                'users' => $users->items(),
+                'pagination' => [
+                    'total' => $users->total(),
+                    'per_page' => $users->perPage(),
+                    'current_page' => $users->currentPage(),
+                    'last_page' => $users->lastPage(),
+                    'from' => $users->firstItem(),
+                    'to' => $users->lastItem()
+                ]
+            ]);
+        } catch (Exception $e) {
+            return \Failed($e->getMessage());
+        }
+    }
+
     /**
      * Add user permissions
      */
     private function addUserPermission($user_id, $permission_ids)
     {
-        User_permission::where('user_id', $user_id)->delete();
-        $data = [];
-        foreach ($permission_ids as $permID) {
-            $data[] = [
-                'user_id'      => $user_id,
-                'permission_id' => $permID,
-                'created_at'  => now(),
-                'updated_at'  => now(),
-            ];
+        // This is deprecated, we use roles and spatie permissions now
+        // But keeping it for backward compatibility if needed temporarily
+    }
+
+    public function changePassword(Request $request)
+    {
+        try {
+            $request->validate([
+                'old_password' => 'required',
+                'new_password' => 'required|min:6|confirmed',
+            ]);
+
+            $user = auth()->user();
+
+            if (!Hash::check($request->old_password, $user->password)) {
+                return \Failed('The old password does not match our records.');
+            }
+
+            $user->update([
+                'password' => Hash::make($request->new_password)
+            ]);
+
+            return \Success('Password changed successfully');
+        } catch (Exception $e) {
+            return \Failed($e->getMessage());
         }
-        User_permission::insert($data);
     }
 
     public function loginError(){

@@ -6,14 +6,12 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    protected $connection = 'mysql2';
-
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::connection($this->connection)->create('client_notes', function (Blueprint $table) {
+        Schema::create('client_notes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('client_id')->constrained('clients')->onDelete('cascade');
             $table->string('title');
@@ -27,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection($this->connection)->dropIfExists('client_notes');
+        Schema::dropIfExists('client_notes');
     }
 };

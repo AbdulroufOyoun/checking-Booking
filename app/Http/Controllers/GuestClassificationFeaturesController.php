@@ -26,9 +26,11 @@ class GuestClassificationFeaturesController extends Controller
     public function getFeaturesByClassification(GetGuestClassificationFeatureByClassificationRequest $request)
     {
         try {
-            $classification = Guest_classification::with('guest_features.guest_feature')->find($request->guest_classification_id);
+            $mappings = Guest_classification_feature::with('guest_feature')
+                ->where('guest_classification_id', $request->guest_classification_id)
+                ->get();
 
-            return \SuccessData('Features for classification retrieved successfully', $classification->guest_features);
+            return \SuccessData('Features for classification retrieved successfully', $mappings);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }

@@ -13,7 +13,7 @@ class Job_title extends Model
 
     protected $table = 'jobtitles';
 
-    protected $fillable = ['jobtitle', 'department_id'];
+    protected $fillable = ['name_ar', 'name_en', 'description', 'department_id'];
 
     function department(): BelongsTo
     {

@@ -26,7 +26,8 @@ class DepartmentsController extends Controller
     {
         try {
             $department = Department::create([
-                'name' => $request->name,
+                'name_ar' => $request->name_ar,
+                'name_en' => $request->name_en,
                 'description' => $request->description ?? null,
             ]);
 
@@ -53,7 +54,8 @@ class DepartmentsController extends Controller
             $department = Department::find($request->id);
 
             $department->update([
-                'name' => $request->name ?? $department->name,
+                'name_ar' => $request->name_ar ?? $department->name_ar,
+                'name_en' => $request->name_en ?? $department->name_en,
                 'description' => $request->description ?? $department->description,
             ]);
 

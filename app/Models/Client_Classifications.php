@@ -11,7 +11,7 @@ class Client_Classifications extends Model
 
     public $table = 'client_classifications';
     protected $fillable = ['classifications_id', 'client_id'];
-    public $timestamps = false;
+    public $timestamps = true;
 
     public function guestClassification()
     {

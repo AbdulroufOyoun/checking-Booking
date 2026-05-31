@@ -10,7 +10,7 @@ class Department extends Model
 {
     use HasFactory;
     public $table = 'departments';
-    protected $fillable = ['name', 'description'];
+    protected $fillable = ['name_ar', 'name_en', 'description'];
 
     function jobtitles(): HasMany
     {

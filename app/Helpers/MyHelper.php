@@ -70,12 +70,15 @@ if (!function_exists('uploadImage')) {
 if (!function_exists('returnPerPage')) {
     function returnPerPage()
     {
-        if (request()->hasHeader('perPage') && is_numeric(request()->header('perPage')) && request()->header('perPage') > 0) {
+        $perPage = 10;
+        if (request()->hasHeader('X-Per-Page') && is_numeric(request()->header('X-Per-Page')) && request()->header('X-Per-Page') > 0) {
+            $perPage = request()->header('X-Per-Page');
+        } elseif (request()->hasHeader('perPage') && is_numeric(request()->header('perPage')) && request()->header('perPage') > 0) {
             $perPage = request()->header('perPage');
-        } else {
-            $perPage = 10;
+        } elseif (request()->has('per_page') && is_numeric(request()->input('per_page')) && request()->input('per_page') > 0) {
+            $perPage = request()->input('per_page');
         }
-        return $perPage;
+        return (int) $perPage;
     }
 }
 

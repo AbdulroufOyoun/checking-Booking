@@ -9,5 +9,10 @@ class Penaltie extends Model
 {
     use HasFactory;
     protected $table = 'penalties';
-    protected $fillable = ['type', 'value', 'name_ar', 'name_en'];
+    protected $fillable = ['type', 'value', 'name_ar', 'name_en', 'description'];
+
+    protected $casts = [
+        'type' => 'integer',
+        'value' => 'double',
+    ];
 }

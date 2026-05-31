@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuditController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BuildingsController;
 use App\Http\Controllers\FloorController;
@@ -29,17 +30,18 @@ use App\Http\Controllers\EarningController;
 use App\Http\Controllers\RevenueController;
 use App\Http\Controllers\RefundPolicyController;
 use App\Http\Controllers\ClientNoteController;
+use App\Http\Controllers\RolesController;
 
 Route::post('login', [UsersController::class, 'login']);
 
 // Route::middleware(['can_do:manage_settings'])->group(function () {
 // });
 Route::get('login_error',[UsersController::class , 'loginError'])->name('login');
+Route::get('buildings', [BuildingsController::class, 'index']);
 
 Route::group(['middleware' => ['auth:api']], function () {
 //=========================================Buildings=============================================
 //Route::post('getBuildingData', [Buildings::class, 'getBuildingData']);
-Route::get('buildings', [BuildingsController::class, 'index']);
 Route::post('updateBuilding', [BuildingsController::class, 'update']);
 Route::post('building', [BuildingsController::class, 'store']);
 Route::delete('building', [BuildingsController::class, 'destroy']);
@@ -143,6 +145,7 @@ Route::post('/updatePeakMonthsCheck', [PeakMonthsController::class, 'updateCheck
 //=====================================Penaltie===================================================
 Route::get('/getPenalties', [PenaltiesController::class, 'index']);
 Route::post('/addPenaltie', [PenaltiesController::class, 'store']);
+Route::post('/updatePenaltie', [PenaltiesController::class, 'update']);
 Route::delete('/deletePenaltie', [PenaltiesController::class, 'destroy']);
 //=====================================ReservationPenalties=======================================
 Route::post('/addReservationPenalty', [PenaltiesController::class, 'addReservationPenalty']);
@@ -154,7 +157,10 @@ Route::post('/updateReservationSource', [ReservationSourcesController::class, 'u
 Route::delete('/deleteReservationSource', [ReservationSourcesController::class, 'destroy']);
 //=====================================Clients====================================================
 Route::get('/getClient', [ClientsController::class, 'index']);
+Route::get('/getClient/{id}', [ClientsController::class, 'show']);
+Route::get('/getClientById/{id}', [ClientsController::class, 'getClientById']);
 Route::post('/addClient', [ClientsController::class, 'store']);
+Route::post('/updateClient', [ClientsController::class, 'update']);
 Route::get('/getClientBy', [ClientsController::class, 'getBy']);
 //=====================================Department=================================================
 Route::get('/getDepartment', [DepartmentsController::class, 'index']);
@@ -162,34 +168,29 @@ Route::post('/addDepartment', [DepartmentsController::class, 'store']);
 Route::get('/getDepartmentById', [DepartmentsController::class, 'show']);
 Route::post('/updateDepartment', [DepartmentsController::class, 'update']);
 Route::delete('/deleteDepartment', [DepartmentsController::class, 'destroy']);
-//=====================================Users======================================================
-Route::post('/addUser', [UsersController::class, 'store']);
-Route::post('/updateUser', [UsersController::class, 'update']);
-Route::get('/inActiveUser', [UsersController::class, 'inActive']);
-Route::get('/getInfoUsers', [UsersController::class, 'index']);
 //=====================================GuestClassification=======================================
 Route::get('/getGuestClassification', [GuestClassificationsController::class, 'index']);
 Route::post('addGuestClassification', [GuestClassificationsController::class, 'store']);
 Route::post('updateGuestClassification', [GuestClassificationsController::class, 'update']);
-Route::delete('deleteGuestClassification', [GuestClassificationsController::class, 'destroy']);
+Route::post('deleteGuestClassification', [GuestClassificationsController::class, 'destroy']);
 
 //=====================================GuestFeature==============================================
 Route::get('getGuestFeature', [GuestFeaturesController::class, 'index']);
 Route::post('addGuestFeature', [GuestFeaturesController::class, 'store']);
 Route::post('updateGuestFeature', [GuestFeaturesController::class, 'update']);
-Route::delete('deleteGuestFeature', [GuestFeaturesController::class, 'destroy']);
+Route::post('deleteGuestFeature', [GuestFeaturesController::class, 'destroy']);
 
 //=====================================GuestClassificationFeature==================================
 Route::get('getGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'index']);
 Route::get('getGuestClassificationFeatureByClassification', [GuestClassificationFeaturesController::class, 'getFeaturesByClassification']);
 Route::post('addGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'store']);
-Route::delete('deleteGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'destroy']);
+Route::post('deleteGuestClassificationFeature', [GuestClassificationFeaturesController::class, 'destroy']);
 
 //=====================================ClientClassification=======================
 Route::get('getAllClientsWithClassification', [ClientClassificationsController::class, 'getAllClientsWithClassification']);
 Route::post('assignClientClassification', [ClientClassificationsController::class, 'assignClassification']);
 Route::get('getClientClassification', [ClientClassificationsController::class, 'getClientClassification']);
-Route::delete('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);
+Route::post('removeClientClassification', [ClientClassificationsController::class, 'removeClassification']);
 
 
 //=========================================Reservation=============================================
@@ -219,8 +220,27 @@ Route::delete('refund-policies', [RefundPolicyController::class, 'destroy']);
 
 Route::get('client-notes', [ClientNoteController::class, 'index']);
 Route::post('client-notes', [ClientNoteController::class, 'store']);
-Route::put('client-notes/{id}', [ClientNoteController::class, 'update']);
-Route::delete('client-notes/{id}', [ClientNoteController::class, 'destroy']);
+Route::put('client-notes', [ClientNoteController::class, 'update']);
+Route::delete('client-notes', [ClientNoteController::class, 'destroy']);
+
+    Route::post('addUser', [UsersController::class, 'store']);
+        Route::post('updateUser', [UsersController::class, 'update']);
+        Route::post('inActive', [UsersController::class, 'inActive']);
+
+        Route::get('getRoles', [RolesController::class, 'index']);
+        Route::post('addRole', [RolesController::class, 'store']);
+        Route::post('updateRole', [RolesController::class, 'update']);
+        Route::post('deleteRole', [RolesController::class, 'destroy']);
+        Route::post('assignRole', [RolesController::class, 'assignRole']);
+        Route::post('bulkAssignRole', [RolesController::class, 'bulkAssignRole']); // Will add this method too
+        Route::get('getInfoUsers', [UsersController::class, 'getInfoUsers']);
+
+        Route::post('changePassword', [UsersController::class, 'changePassword']);
+    // RBAC Routes
+    Route::group(['prefix' => 'users'], function () {
+        Route::get('getPermissions', [PermissionsController::class, 'index']);
+
+    });
 
     });
 

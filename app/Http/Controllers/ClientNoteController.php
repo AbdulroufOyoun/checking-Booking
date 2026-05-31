@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\ClientNote;
 use Illuminate\Http\Request;
-use App\Http\Requests\GetNotesByClientIdRequest;
-use App\Http\Requests\StoreClientNoteRequest;
+use App\Http\Requests\ClientNote\GetNotesByClientIdRequest;
+use App\Http\Requests\ClientNote\StoreClientNoteRequest;
+use App\Http\Requests\ClientNote\UpdateClientNoteRequest;
+use App\Http\Requests\ClientNote\DeleteClientNoteRequest;
 
 class ClientNoteController extends Controller
 {
@@ -41,10 +43,10 @@ class ClientNoteController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, $id)
+    public function update(UpdateClientNoteRequest $request)
     {
         try {
-            $note = ClientNote::findOrFail($id);
+            $note = ClientNote::findOrFail($request->id);
             $note->update($request->all());
             return \SuccessData('Note updated successfully', $note);
         } catch (\Exception $e) {
@@ -55,10 +57,10 @@ class ClientNoteController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy(DeleteClientNoteRequest $request)
     {
         try {
-            $note = ClientNote::findOrFail($id);
+            $note = ClientNote::findOrFail($request->id);
             $note->delete();
             return \Success('Note deleted successfully');
         } catch (\Exception $e) {

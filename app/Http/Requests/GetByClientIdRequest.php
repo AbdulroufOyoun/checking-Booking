@@ -22,7 +22,7 @@ class GetByClientIdRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'client_id' => 'required|exists:mysql2.clients,id',
+            'client_id' => 'required|exists:clients,id',
         ];
     }
 }

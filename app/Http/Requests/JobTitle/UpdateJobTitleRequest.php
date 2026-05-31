@@ -16,10 +16,11 @@ class UpdateJobTitleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'id' => 'required|numeric|exists:job_titles,id',
-            'name' => 'nullable|string|max:255',
+            'id' => 'required|numeric|exists:jobtitles,id',
+            'name_ar' => 'nullable|string|max:255',
+            'name_en' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
             'department_id' => 'nullable|numeric|exists:departments,id',
-            'active' => 'nullable|in:0,1',
         ];
     }
 

@@ -19,14 +19,15 @@ class UserResource extends JsonResource
 
             // العلاقات
             'jobtitle_id'     => $this->jobtitle_id,
-            'jobtitle_name'   => $this->jobtitle?->jobtitle,
+            'jobtitle_name'   => $this->jobtitle?->name_en ?? $this->jobtitle?->name_ar,
             'department_id'   => $this->department_id,
-            'department_name' => $this->department?->name,
+            'department_name' => $this->department?->name_en ?? $this->department?->name_ar,
             'discount_id'     => $this->discount_id,
             'discount_name'   => $this->discount?->name,
 
-            // الصلاحيات
+            // الصلاحيات والأدوار
             'permissions'     => $this->permissions->pluck('permission'),
+            'roles'           => $this->roles->pluck('name'),
 
             // التواريخ
             'created_at'      => $this->created_at?->format('Y-m-d H:i:s'),

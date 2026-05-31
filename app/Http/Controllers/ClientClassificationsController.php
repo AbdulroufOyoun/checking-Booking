@@ -18,8 +18,7 @@ class ClientClassificationsController extends Controller
     public function assignClassification(AssignClassificationRequest $request)
     {
         try {
-            $client = DB::connection('mysql2')
-                ->table('clients')
+            $client = DB::table('clients')
                 ->where('id', $request->client_id)
                 ->first();
 
@@ -56,8 +55,7 @@ class ClientClassificationsController extends Controller
     public function getClientClassification(GetClientClassificationRequest $request)
     {
         try {
-            $client = DB::connection('mysql2')
-                ->table('clients')
+            $client = DB::table('clients')
                 ->where('id', $request->client_id)
                 ->first();
 
@@ -99,21 +97,23 @@ class ClientClassificationsController extends Controller
     public function getAllClientsWithClassification()
     {
         try {
-    $classificationsData = Client_Classifications::with('guestClassification')->get();
+            $perPage = \returnPerPage();
+            $classificationsData = Client_Classifications::with('guestClassification')
+                ->latest()
+                ->paginate($perPage);
 
-    $clientIds = $classificationsData->pluck('client_id')->unique()->filter()->toArray();
+            $clientIds = collect($classificationsData->items())->pluck('client_id')->unique()->filter()->toArray();
 
-    $clients = DB::connection('mysql2')
-        ->table('clients')
-        ->whereIn('id', $clientIds)
-        ->get()
-        ->keyBy('id');
+            $clients = DB::table('clients')
+                ->whereIn('id', $clientIds)
+                ->get()
+                ->keyBy('id');
 
-    $classificationsData->transform(function ($item) use ($clients) {
-        $item->client_details = $clients->get($item->client_id) ?? null;
-        return $item;
-    });
-            return \SuccessData('All clients with classifications fetched successfully', $classificationsData);
+            foreach ($classificationsData->items() as $item) {
+                $item->client_details = $clients->get($item->client_id) ?? null;
+            }
+
+            return \Pagination($classificationsData);
 
         } catch (Exception $e) {
             return \Failed($e->getMessage());

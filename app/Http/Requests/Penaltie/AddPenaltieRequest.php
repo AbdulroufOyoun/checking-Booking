@@ -16,10 +16,11 @@ class AddPenaltieRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => 'required|string|max:255',
+            'type' => 'required|in:0,1',
             'value' => 'required|numeric',
             'name_ar' => 'required|string|max:255',
             'name_en' => 'required|string|max:255',
+            'description' => 'nullable|string|max:1000',
         ];
     }
 

@@ -5,8 +5,6 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\User;
-use App\Models\User_permission;
-use App\Models\Permission;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
@@ -16,30 +14,25 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create admin user
-        $admin = User::create([
-            'name'          => 'Admin',
-            'job_number'    => '001',
-            'jobtitle_id'   => null,
-            'department_id' => null,
-            'mobile'        => '0555555555',
-            'email'         => 'admin@hotel.com',
-            'discount_id'   => null,
-            'active'        => 1,
-            'password'      => Hash::make('admin123'),
-        ]);
+        // Create admin user with fixed ID 1
+        $admin = User::updateOrCreate(
+            ['id' => 1],
+            [
+                'name'          => 'Admin',
+                'email'         => 'admin@hotel.com',
+                'job_number'    => '001',
+                'jobtitle_id'   => null,
+                'department_id' => null,
+                'mobile'        => '0555555555',
+                'discount_id'   => null,
+                'active'        => 1,
+                'password'      => Hash::make('admin123'),
+            ]
+        );
 
-        // Get all permissions
-        $permissions = Permission::all();
+        // Assign admin role to admin user (Role created in PermissionSeeder)
+        $admin->assignRole('admin');
 
-        // Give all permissions to admin user
-        foreach ($permissions as $permission) {
-            User_permission::create([
-                'user_id'       => $admin->id,
-                'permission_id' => $permission->id,
-            ]);
-        }
-
-        $this->command->info('Admin user created successfully with all permissions!');
+        $this->command->info('Admin user with ID 1 created successfully and assigned to admin role!');
     }
 }

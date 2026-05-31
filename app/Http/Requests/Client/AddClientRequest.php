@@ -16,6 +16,7 @@ class AddClientRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'id' => 'nullable|exists:clients,id',
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => 'nullable|email',

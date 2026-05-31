@@ -13,7 +13,9 @@ return new class extends Migration
     {
         Schema::create('jobtitles', function (Blueprint $table) {
             $table->id();
-            $table->string('jobtitle');
+            $table->string('name_en');
+            $table->string('name_ar');
+            $table->text('description')->nullable();
             $table->unsignedBigInteger('department_id')->comment('Foreign key to departments table');
             $table->timestamps();
         });

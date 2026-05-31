@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Http\Requests\JobTitle;
+namespace App\Http\Requests\Penaltie;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Contracts\Validation\Validator;
 
-class AddJobTitleRequest extends FormRequest
+class UpdatePenaltieRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -16,10 +16,12 @@ class AddJobTitleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name_ar' => 'required|string|max:255',
-            'name_en' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'department_id' => 'required|numeric|exists:departments,id',
+            'id' => 'required|numeric|exists:penalties,id',
+            'type' => 'nullable|in:0,1',
+            'value' => 'nullable|numeric',
+            'name_ar' => 'nullable|string|max:255',
+            'name_en' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:1000',
         ];
     }
 
