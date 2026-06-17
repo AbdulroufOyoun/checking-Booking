@@ -16,7 +16,7 @@ class RoomController extends Controller
     {
         try {
             $perPage = \returnPerPage();
-            $query = Room::where('active', 1);
+            $query = Room::with(['roomType', 'building', 'floor', 'suite'])->where('active', 1);
 
             if ($request->building_id) {
                 $query->where('building_id', $request->building_id);
@@ -112,9 +112,12 @@ return Success('Rooms created successfully.', $addedRooms);
         if ($request->has('capacity')) {
             $room->capacity = $request->capacity;
         }
+        if ($request->has('roomStatus')) {
+            $room->roomStatus = (int) $request->roomStatus;
+        }
 
         try {
-            $room->update();
+            $room->save();
             return Success('Room updated Successfully');
         } catch (\Exception $e) {
             return Failed($e->getMessage());

@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Client extends Model
 {
+    /** Guest master data lives on the secondary database (mysql2 / DB2_*). */
+    protected $connection = 'mysql2';
+
     protected $fillable = [
         'first_name',
         'last_name',

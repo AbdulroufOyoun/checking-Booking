@@ -17,10 +17,11 @@ class GetRoomPriceRequest extends FormRequest
     {
         return [
             'startDate'        => 'required|date',
-            'endDate'          => 'required_if:typeReservation,0|date|after_or_equal:startDate',
+            'endDate'          => 'required|date|after:startDate',
             'roomTypeId'       => 'required|numeric|exists:room_types,id',
             'typeReservation'  => 'required|in:0,1,2',
-            'numberOfMonths'   => 'required_if:typeReservation,1|numeric'
+            'numberOfMonths'   => 'nullable|numeric|min:1',
+            'price_calculation_mode' => 'nullable|in:0,1,2',
         ];
     }
 

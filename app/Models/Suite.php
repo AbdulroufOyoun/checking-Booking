@@ -13,7 +13,7 @@ class Suite extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['building_id', 'floor_id', 'number', 'suiteStatus', 'active'];
+    protected $fillable = ['building_id', 'floor_id', 'number', 'suiteStatus', 'active', 'lock_id'];
 
     public $timestamps = false;
 

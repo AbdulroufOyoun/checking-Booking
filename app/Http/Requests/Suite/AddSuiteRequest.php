@@ -23,7 +23,8 @@ class AddSuiteRequest extends FormRequest
             'floor_id'    => 'required|numeric|exists:floors,id',
             'number'      => [
                 'required',
-                'numeric',
+                'string',
+                'max:100',
                 Rule::unique('suites', 'number')->where(function ($query) use ($buildingId) {
                     return $query->where('building_id', $buildingId);
                 }),

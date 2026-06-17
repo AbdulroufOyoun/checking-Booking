@@ -24,7 +24,7 @@ class MakeReservationRequest extends FormRequest
             'start_date'            => 'required|date|after_or_equal:today',
             'expire_date'           => 'required|date|after:start_date',
             'reservation_type'      => 'required|in:0,1',
-            'reservation_status'    => 'nullable|in:0,1,2',
+            'reservation_status'    => 'nullable|in:0,1,2,3',
             'stay_reason_id'        => 'required|numeric|exists:stay_reasons,id',
             'reservation_source_id' => 'required|numeric|exists:reservation_sources,id',
             'rent_type'             => 'required|in:0,1',

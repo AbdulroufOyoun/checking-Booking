@@ -17,16 +17,14 @@ class SuiteController extends Controller
     {
         try {
             $perPage = \returnPerPage();
-            $query = Suite::where('active', 1);
+            $query = Suite::with(['rooms.roomType'])->where('active', 1);
 
-            if($request->building_id) {
+            if ($request->building_id) {
                 $query->where('building_id', $request->building_id);
             }
             if ($request->floor_id) {
-                $query=Suite::where('active', 1)->where('floor_id', $request->floor_id);
+                $query->where('floor_id', $request->floor_id);
             }
-
-
 
             $suites = $query->paginate($perPage);
             return \Pagination($suites);
@@ -39,6 +37,23 @@ class SuiteController extends Controller
     {
         DB::beginTransaction();
         try {
+            $roomIds = collect($request->rooms)->pluck('id');
+            $rooms = Room::whereIn('id', $roomIds)
+                ->where('building_id', $request->building_id)
+                ->where('floor_id', $request->floor_id)
+                ->where('active', 1)
+                ->get();
+
+            if ($rooms->count() !== $roomIds->count()) {
+                DB::rollBack();
+                return Failed('One or more selected rooms are invalid for this floor.', 422);
+            }
+
+            if ($rooms->contains(fn ($room) => $room->suite_id !== null)) {
+                DB::rollBack();
+                return Failed('One or more selected rooms already belong to a suite.', 422);
+            }
+
             $suite = Suite::create([
                 'building_id' => $request->building_id,
                 'floor_id' => $request->floor_id,
@@ -47,14 +62,11 @@ class SuiteController extends Controller
                 'active' => 1,
                 'lock_id' => $request->lock_id ?? null,
             ]);
-            if ($suite) {
-                 $roomIds = collect($request->rooms)->pluck('id');
-                Room::whereIn('id', $roomIds)->update(['suite_id' => $suite->id]);
-                DB::commit();
-                return SuccessData('Suite added Successfully', $suite->load('rooms'));
-            }
-            DB::rollBack();
-            return Failed('The suite has not been added',422);
+
+            Room::whereIn('id', $roomIds)->update(['suite_id' => $suite->id]);
+
+            DB::commit();
+            return SuccessData('Suite added Successfully', $suite->load(['rooms.roomType']));
         } catch (Exception $e) {
             DB::rollBack();
             return Failed($e->getMessage());
@@ -63,21 +75,60 @@ class SuiteController extends Controller
 
     public function updateSuite(UpdateSuiteRequest $request)
     {
-        $suite = Suite::find($request->id);
+        $suite = Suite::with('rooms')->find($request->id);
 
+        if (!$suite) {
+            return Failed('Suite not found.', 404);
+        }
+
+        DB::beginTransaction();
         try {
-            if ($request->number) {
+            if ($request->has('number') && $request->number !== null) {
                 $suite->number = $request->number;
-                $suite->save();
             }
-            if ($request->has('room_ids_to_add')) {
-                Room::whereIn('id', $request->room_ids_to_add)->update(['suite_id' => $suite->id]);
+
+            if ($request->has('active')) {
+                $suite->active = (int) $request->boolean('active');
             }
-            if ($request->has('room_ids_to_remove')) {
-                Room::whereIn('id', $request->room_ids_to_remove)->update(['suite_id' => null]);
+
+            $suite->save();
+
+            if ($request->filled('room_ids_to_add')) {
+                $ids = collect($request->room_ids_to_add);
+                $rooms = Room::whereIn('id', $ids)
+                    ->where('building_id', $suite->building_id)
+                    ->where('floor_id', $suite->floor_id)
+                    ->where('active', 1)
+                    ->get();
+
+                if ($rooms->count() !== $ids->count()) {
+                    DB::rollBack();
+                    return Failed('One or more rooms are invalid for this suite floor.', 422);
+                }
+
+                if ($rooms->contains(fn ($room) => $room->suite_id !== null && (int) $room->suite_id !== (int) $suite->id)) {
+                    DB::rollBack();
+                    return Failed('One or more rooms already belong to another suite.', 422);
+                }
+
+                Room::whereIn('id', $ids)->update(['suite_id' => $suite->id]);
             }
-            return SuccessData('Suite updated Successfully', $suite->load('rooms'));
+
+            if ($request->filled('room_ids_to_remove')) {
+                Room::whereIn('id', $request->room_ids_to_remove)
+                    ->where('suite_id', $suite->id)
+                    ->update(['suite_id' => null]);
+            }
+
+            DB::commit();
+
+            $message = $suite->active === 0
+                ? 'Suite deactivated successfully.'
+                : 'Suite updated Successfully';
+
+            return SuccessData($message, $suite->fresh(['rooms.roomType']));
         } catch (Exception $e) {
+            DB::rollBack();
             return Failed($e->getMessage());
         }
     }

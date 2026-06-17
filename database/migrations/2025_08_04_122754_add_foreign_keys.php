@@ -47,10 +47,12 @@ return new class extends Migration
             $table->foreign('department_id')->references('id')->on('departments');
             $table->foreign('discount_id')->references('id')->on('discounts');
         });
-        Schema::table('user_permissions', function (Blueprint $table) {
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            $table->foreign('permission_id')->references('id')->on('permissions')->onDelete('cascade');
-        });
+        if (Schema::hasTable('user_permissions')) {
+            Schema::table('user_permissions', function (Blueprint $table) {
+                $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+                $table->foreign('permission_id')->references('id')->on('permissions')->onDelete('cascade');
+            });
+        }
         Schema::table('guest_classification_features', function (Blueprint $table) {
             $table->foreign('guest_classification_id')->references('id')->on('guest_classifications')->onDelete('cascade');
             $table->foreign('guest_feature_id')->references('id')->on('guests_features')->onDelete('cascade');
@@ -98,10 +100,12 @@ return new class extends Migration
             $table->dropForeign(['department_id']);
             $table->dropForeign(['discount_id']);
         });
-        Schema::table('user_permissions', function (Blueprint $table) {
-            $table->dropForeign(['user_id']);
-            $table->dropForeign(['permission_id']);
-        });
+        if (Schema::hasTable('user_permissions')) {
+            Schema::table('user_permissions', function (Blueprint $table) {
+                $table->dropForeign(['user_id']);
+                $table->dropForeign(['permission_id']);
+            });
+        }
         Schema::table('guest_classification_features', function (Blueprint $table) {
             $table->dropForeign(['guest_classification_id']);
             $table->dropForeign(['guest_feature_id']);

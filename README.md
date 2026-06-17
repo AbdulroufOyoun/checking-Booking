@@ -1,3 +1,19 @@
+## Hotel System API (checking-Booking)
+
+Demo setup, seeded data, and login: see **[DEMO.md](DEMO.md)** and **[../DEMO_RUNBOOK.md](../DEMO_RUNBOOK.md)**.
+
+Quick start:
+
+```bash
+php artisan migrate:fresh --seed
+php artisan demo:verify
+php artisan serve --host=127.0.0.1 --port=8001
+```
+
+Tests: `php artisan test --filter=Finance` and `php artisan demo:verify`.
+
+---
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">

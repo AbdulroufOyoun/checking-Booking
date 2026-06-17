@@ -17,13 +17,16 @@ class LoginResource extends JsonResource
     {
         return [
             "id"=> $this->id,
-             'job_number'=>$this->job_number,
+            'name' => $this->name,
+            'job_number'=>$this->job_number,
         'jobtitle_id'=>$this->jobtitle_id,
         'department_id'=>$this->department_id,
         'discount'=>$this->discount,
         'mobile'=>$this->mobile,
         'email'=>$this->email,
-        'permission'=>$this->permission,
+        'permissions' => $this->getAllPermissions()->pluck('name')->values()->all(),
+        'roles' => $this->getRoleNames()->values()->all(),
+        'role' => $this->getRoleNames()->first(),
         'token'=>$this->token->accessToken,
         'token_expire_at'=>Carbon::parse($this->token->token->expires_at)->format('Y-m-d H:i:s'),
         ];

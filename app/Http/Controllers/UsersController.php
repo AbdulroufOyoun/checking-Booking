@@ -6,9 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\Permission;
 use App\Models\Job_title;
 use App\Models\Department;
-use App\Models\User_permission;
 use Spatie\Permission\Models\Role;
 use App\Http\Resources\UserResource;
 use App\Http\Requests\User\AddUserRequest;
@@ -29,20 +29,46 @@ class UsersController extends Controller
     {
         $arr = Arr::only($request->validated(), ['job_number', 'password' ]);
         $where = ['job_number' => $arr['job_number']];
-        $user = User::where( $where)->first();
-    if (!$user->active) {
+        $user = User::where($where)->first();
+        if (!$user) {
+            return \Failed('Invalid job number');
+        }
+        if (!$user->active) {
             return \Failed('This account is disActive');
         }
         if (!Hash::check($arr['password'], $user->password)) {
-            return \Failed('Wrong Password'); }
-
-        $user['permissions'] = $user->permissions();
-
-        $user->tokens()->delete();
-
-         $user['token'] = $user->createToken('authToken');
-        return \SuccessData("Logged In Success", new LoginResource($user));
+            return \Failed('Wrong Password');
         }
+
+        $token = $user->createToken('authToken');
+        $user->setAttribute('token', $token);
+        $user->load(['roles.permissions', 'permissions']);
+
+        return \SuccessData('Logged In Success', new LoginResource($user));
+    }
+
+    /**
+     * Current session profile (roles + permissions) for SPA refresh after login.
+     */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return \Failed('Unauthorized', 401);
+        }
+
+        $user->load(['roles.permissions', 'permissions']);
+
+        return \SuccessData('User session', [
+            'id' => $user->id,
+            'name' => $user->name,
+            'job_number' => $user->job_number,
+            'email' => $user->email,
+            'role' => $user->getRoleNames()->first(),
+            'roles' => $user->getRoleNames()->values()->all(),
+            'permissions' => $user->getAllPermissions()->pluck('name')->values()->all(),
+        ]);
+    }
 
     /**
      * Add new user
@@ -64,16 +90,19 @@ class UsersController extends Controller
                 'password'      => Hash::make($request->password),
             ]);
 
-            if ($request->has('permission_ids')) {
+            if ($request->filled('permission_ids')) {
                 $this->addUserPermission($user->id, $request->permission_ids);
             }
 
-            if ($request->has('role_id')) {
+            if ($request->filled('role_id')) {
                 $role = Role::find($request->role_id);
                 if ($role) {
-                    $user->assignRole($role->name);
+                    $user->syncRoles([$role->name]);
+                    $user->forgetCachedPermissions();
                 }
             }
+
+            app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
             $user->load(['jobtitle', 'department', 'discount', 'permissions', 'roles']);
             DB::commit();
@@ -201,8 +230,9 @@ class UsersController extends Controller
      */
     private function addUserPermission($user_id, $permission_ids)
     {
-        // This is deprecated, we use roles and spatie permissions now
-        // But keeping it for backward compatibility if needed temporarily
+        $user = User::findOrFail($user_id);
+        $permissionNames = Permission::whereIn('id', $permission_ids)->pluck('name')->all();
+        $user->syncPermissions($permissionNames);
     }
 
     public function changePassword(Request $request)

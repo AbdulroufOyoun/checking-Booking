@@ -62,6 +62,7 @@ class PermissionSeeder extends Seeder
             ['name' => 'manage penalties', 'name_ar' => 'إدارة الجزاءات', 'category' => 'Settings'],
             ['name' => 'manage reservation sources', 'name_ar' => 'إدارة مصادر الحجز', 'category' => 'Settings'],
             ['name' => 'manage peak days', 'name_ar' => 'إدارة أيام الذروة', 'category' => 'Settings'],
+            ['name' => 'manage peak months', 'name_ar' => 'إدارة أشهر الذروة', 'category' => 'Settings'],
             ['name' => 'manage refund policies', 'name_ar' => 'إدارة سياسات الاسترجاع', 'category' => 'Settings'],
 
             // Users & Permissions
@@ -73,12 +74,21 @@ class PermissionSeeder extends Seeder
             // Reservations
             ['name' => 'view reservations', 'name_ar' => 'عرض الحجوزات', 'category' => 'Reservations'],
             ['name' => 'create reservations', 'name_ar' => 'إنشاء الحجوزات', 'category' => 'Reservations'],
+            ['name' => 'update reservations', 'name_ar' => 'تحديث الحجوزات', 'category' => 'Reservations'],
+            ['name' => 'cancel reservations', 'name_ar' => 'إلغاء الحجوزات', 'category' => 'Reservations'],
             ['name' => 'manage refunds', 'name_ar' => 'إدارة المرتجعات', 'category' => 'Reservations'],
 
             // Finance
             ['name' => 'view earnings', 'name_ar' => 'عرض الأرباح', 'category' => 'Finance'],
             ['name' => 'view revenue', 'name_ar' => 'عرض الإيرادات', 'category' => 'Finance'],
             ['name' => 'view payments', 'name_ar' => 'عرض المدفوعات', 'category' => 'Finance'],
+            ['name' => 'view reports', 'name_ar' => 'عرض التقارير', 'category' => 'Finance'],
+            ['name' => 'view financial reports', 'name_ar' => 'عرض التقارير المالية', 'category' => 'Finance'],
+            ['name' => 'view accounting reports', 'name_ar' => 'عرض التقارير المحاسبية', 'category' => 'Finance'],
+            ['name' => 'export reports', 'name_ar' => 'تصدير التقارير', 'category' => 'Finance'],
+            ['name' => 'manage chart of accounts', 'name_ar' => 'إدارة دليل الحسابات', 'category' => 'Finance'],
+            ['name' => 'manage journal entries', 'name_ar' => 'إدارة قيود اليومية', 'category' => 'Finance'],
+            ['name' => 'close accounting period', 'name_ar' => 'إقفال الفترة المحاسبية', 'category' => 'Finance'],
 
             // Clients
             ['name' => 'view clients', 'name_ar' => 'عرض العملاء', 'category' => 'Clients'],
@@ -111,8 +121,10 @@ class PermissionSeeder extends Seeder
         );
         $receptionistRole->syncPermissions([
             'view buildings', 'view floors', 'view suites', 'view rooms', 'view room types',
-            'view reservations', 'create reservations',
-            'view clients', 'manage clients', 'manage client notes'
+            'view reservations', 'create reservations', 'update reservations', 'cancel reservations',
+            'view earnings', 'view payments', 'view reports', 'export reports',
+            'view clients', 'manage clients', 'manage client notes',
+            'manage peak days', 'manage peak months',
         ]);
 
         $managerRole = Role::updateOrCreate(
@@ -121,10 +133,23 @@ class PermissionSeeder extends Seeder
         );
         $managerRole->syncPermissions([
             'view buildings', 'view floors', 'view suites', 'view rooms', 'view room types',
-            'view reservations', 'create reservations', 'manage refunds',
+            'manage rooms', 'manage pricing plans',
+            'view reservations', 'create reservations', 'update reservations', 'cancel reservations', 'manage refunds',
             'view earnings', 'view revenue', 'view payments',
+            'view reports', 'view financial reports', 'export reports',
             'view clients', 'manage clients', 'manage client notes',
-            'view users'
+            'view users', 'manage peak days', 'manage peak months',
+        ]);
+
+        $accountantRole = Role::updateOrCreate(
+            ['name' => 'accountant', 'guard_name' => 'api'],
+            ['name_ar' => 'محاسب', 'is_system' => true, 'description' => 'Accounting and financial reports']
+        );
+        $accountantRole->syncPermissions([
+            'view reports', 'view financial reports', 'view accounting reports', 'export reports',
+            'view revenue', 'view earnings', 'view payments',
+            'manage chart of accounts', 'manage journal entries', 'close accounting period',
+            'view clients',
         ]);
     }
 }

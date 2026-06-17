@@ -2,11 +2,7 @@
 
 namespace Database\Seeders;
 
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use App\Models\College;
-use App\Models\User;
-use Database\Seeders\PermissionSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,10 +11,21 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call([
+        $seeders = [
             PermissionSeeder::class,
+            ChartOfAccountsSeeder::class,
             PeakDayAndMonthSeeder::class,
-            UserSeeder::class,
-        ]);
+            AdminSeeder::class,
+        ];
+
+        if (!filter_var(env('DEMO_LIGHT', false), FILTER_VALIDATE_BOOL)) {
+            $seeders[] = HotelDemoSeeder::class;
+        } else {
+            $this->command?->info('DEMO_LIGHT enabled — skipping HotelDemoSeeder (~650 reservations).');
+        }
+
+        $seeders[] = DemoBootstrapSeeder::class;
+
+        $this->call($seeders);
     }
 }

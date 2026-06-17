@@ -12,6 +12,47 @@ class Reservation extends Model
 {
     use HasFactory;
 
+    /** Guest physically in room (used by RoomOccupancyService and UI). */
+    public const LOGEDIN_IN_HOUSE = 1;
+
+    /** Guest not checked in yet (or checked out). */
+    public const LOGEDIN_NOT_IN_HOUSE = 0;
+
+    /** Draft / unconfirmed. */
+    public const STATUS_UNCONFIRMED = 0;
+
+    /** Confirmed active reservation. */
+    public const STATUS_CONFIRMED = 1;
+
+    /** Awaiting payment — still holds calendar visibility but excluded from accrual. */
+    public const STATUS_PENDING_PAYMENT = 2;
+
+    /** Cancelled or voided. */
+    public const STATUS_CANCELLED = 3;
+
+    public static function isCancelled(int $status): bool
+    {
+        return $status === self::STATUS_CANCELLED;
+    }
+
+    /** Statuses excluded from inventory overlap checks (pending + cancelled). */
+    public static function nonBlockingInventoryStatuses(): array
+    {
+        return [self::STATUS_PENDING_PAYMENT, self::STATUS_CANCELLED];
+    }
+
+    /** Statuses included in cash / payment reports. */
+    public static function cashReportStatuses(): array
+    {
+        return [self::STATUS_CONFIRMED, self::STATUS_PENDING_PAYMENT];
+    }
+
+    /** Statuses shown on operational reports (excludes pending + cancelled). */
+    public static function operationalReportStatuses(): array
+    {
+        return [self::STATUS_UNCONFIRMED, self::STATUS_CONFIRMED];
+    }
+
     protected $fillable = [
         'client_id',
         'start_date',

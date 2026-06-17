@@ -19,15 +19,25 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    'allowed_origins' => array_values(array_filter(array_unique([
+        env('FRONTEND_URL'),
+        'https://hotelsystem.osus.network',
+        'https://hotelsystemback.osus.network',
+        'http://localhost:4200',
+        'http://127.0.0.1:4200',
+    ]))),
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => [
+        '#^https://([a-z0-9-]+\.)?osus\.network$#',
+        '#^http://192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+        '#^http://10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$#',
+    ],
 
     'allowed_headers' => ['*'],
 
     'exposed_headers' => [],
 
-    'max_age' => 0,
+    'max_age' => 86400,
 
     'supports_credentials' => false,
 

@@ -32,6 +32,7 @@ class UpdateSuiteRequest extends FormRequest
             'room_ids_to_add.*' => 'numeric|exists:rooms,id',
             'room_ids_to_remove' => 'nullable|array',
             'room_ids_to_remove.*' => 'numeric|exists:rooms,id',
+            'active' => 'nullable|boolean',
         ];
     }
 

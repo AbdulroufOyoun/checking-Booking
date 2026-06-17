@@ -1,0 +1,66 @@
+<?php
+
+namespace Tests\Feature\Reports;
+
+use Tests\TestCase;
+
+class AllReportsSlugTest extends TestCase
+{
+    public static function reportSlugProvider(): array
+    {
+        return [
+            ['overview'],
+            ['room-board'],
+            ['accrual-revenue'],
+            ['cash-box'],
+            ['chart-of-accounts'],
+            ['journal-entries'],
+            ['arrivals-departures'],
+            ['reservations-list'],
+            ['occupancy'],
+            ['revenue-summary'],
+            ['accrual-cash-reconciliation'],
+            ['ar-aging'],
+            ['adjustments'],
+            ['tax'],
+            ['revpar'],
+            ['by-dimension'],
+            ['peak-analysis'],
+            ['payments-refunds'],
+            ['closing-package'],
+            ['general-ledger'],
+            ['trial-balance'],
+            ['profit-loss'],
+            ['balance-sheet'],
+            ['cash-flow'],
+            ['financial-audit-log'],
+        ];
+    }
+
+    /** @dataProvider reportSlugProvider */
+    public function test_report_slug_returns_valid_payload(string $slug): void
+    {
+        $user = $this->userWithApiPermissions([
+            'view reports', 'view financial reports', 'view accounting reports',
+        ]);
+
+        $response = $this->actingAs($user, 'api')->getJson(
+            "/api/users/reports/{$slug}?start_date=2026-08-01&end_date=2026-08-31"
+        );
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+
+        $data = $response->json('data');
+        $this->assertIsArray($data);
+        $this->assertArrayHasKey('columns', $data);
+        $this->assertArrayHasKey('rows', $data);
+        $this->assertIsArray($data['columns']);
+        $this->assertIsArray($data['rows']);
+
+        foreach ($data['columns'] as $column) {
+            $this->assertArrayHasKey('key', $column);
+            $this->assertArrayHasKey('label', $column);
+        }
+    }
+}

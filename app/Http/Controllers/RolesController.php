@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\PropertyPermissionBundle;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
 use App\Models\User;
@@ -34,7 +35,10 @@ class RolesController extends Controller
                 'guard_name' => 'api'
             ]);
 
-            $role->syncPermissions($request->permissions);
+            $permissions = PropertyPermissionBundle::expand($request->permissions);
+
+            $role->syncPermissions($permissions);
+            app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
             return SuccessData('Role created successfully', $role->load('permissions'));
         } catch (\Exception $e) {
@@ -59,7 +63,10 @@ class RolesController extends Controller
                 'description' => $request->description,
             ]);
 
-            $role->syncPermissions($request->permissions);
+            $permissions = PropertyPermissionBundle::expand($request->permissions);
+
+            $role->syncPermissions($permissions);
+            app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
             return SuccessData('Role updated successfully', $role->load('permissions'));
         } catch (\Exception $e) {
@@ -95,6 +102,8 @@ class RolesController extends Controller
             $role = Role::findOrFail($request->roleId);
 
             $user->syncRoles([$role->name]);
+            $user->forgetCachedPermissions();
+            app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
             return Success('Role assigned successfully');
         } catch (\Exception $e) {
@@ -116,7 +125,10 @@ class RolesController extends Controller
 
             foreach ($users as $user) {
                 $user->syncRoles([$role->name]);
+                $user->forgetCachedPermissions();
             }
+
+            app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
             return Success('Roles assigned successfully to ' . $users->count() . ' users');
         } catch (\Exception $e) {

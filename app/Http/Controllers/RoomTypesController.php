@@ -12,10 +12,40 @@ use App\Http\Requests\RoomType\AddRoomtypePricingRequest;
 use App\Http\Requests\RoomType\AddRoomtypePricingPlanRequest;
 use App\Http\Requests\RoomType\UpdateRoomtypePricingRequest;
 use App\Http\Requests\RoomType\DeleteRoomtypePricingRequest;
+use App\Services\PricingPlanOverlapService;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class RoomTypesController extends Controller
 {
+    public function __construct(private PricingPlanOverlapService $pricingPlanOverlap)
+    {
+    }
+
+    private function isPricingPlanExpired(Pricingplan $plan): bool
+    {
+        return Carbon::parse($plan->EndDate)->startOfDay()->lt(Carbon::today());
+    }
+
+    private function rejectIfPricingOverlap(
+        int $roomtypeId,
+        string $startDate,
+        string $endDate,
+        ?int $excludeRoomtypePricingId = null
+    ): ?\Illuminate\Http\JsonResponse {
+        $conflict = $this->pricingPlanOverlap->findConflict(
+            $roomtypeId,
+            $startDate,
+            $endDate,
+            $excludeRoomtypePricingId
+        );
+
+        if ($conflict) {
+            return Failed($this->pricingPlanOverlap->conflictMessage($conflict), 200);
+        }
+
+        return null;
+    }
 
     public function addRoomType(AddRoomTypeRequest $request)
     {
@@ -116,6 +146,14 @@ class RoomTypesController extends Controller
     public function addRoomtypePricing(AddRoomtypePricingRequest $request)
     {
         try {
+            if ($response = $this->rejectIfPricingOverlap(
+                (int) $request->roomtype_id,
+                $request->StartDate,
+                $request->EndDate
+            )) {
+                return $response;
+            }
+
             DB::beginTransaction();
 
             $pricingPlan = Pricingplan::create([
@@ -158,9 +196,24 @@ class RoomTypesController extends Controller
     public function addRoomtypePricingPlan(AddRoomtypePricingPlanRequest $request)
     {
         try {
+            $pricingPlan = Pricingplan::findOrFail($request->pricingplan_id);
+
+            if (RoomtypePricingplan::where('roomtype_id', $request->roomtype_id)
+                ->where('pricingplan_id', $pricingPlan->id)
+                ->exists()) {
+                return Failed('This pricing plan is already assigned to this room type.', 200);
+            }
+
+            if ($response = $this->rejectIfPricingOverlap(
+                (int) $request->roomtype_id,
+                $pricingPlan->StartDate,
+                $pricingPlan->EndDate
+            )) {
+                return $response;
+            }
+
             DB::beginTransaction();
 
-            $pricingPlan = Pricingplan::findOrFail($request->pricingplan_id);
             $roomTypePricing = RoomtypePricingplan::create([
                 'roomtype_id' => $request->roomtype_id,
                 'pricingplan_id' => $pricingPlan->id,
@@ -196,6 +249,21 @@ class RoomTypesController extends Controller
         try {
             DB::beginTransaction();
             $pricingPlan = Pricingplan::findOrFail($request->pricingplan_id);
+            if ($this->isPricingPlanExpired($pricingPlan)) {
+                DB::rollBack();
+                return Failed('Cannot modify an expired pricing plan.');
+            }
+
+            if ($response = $this->rejectIfPricingOverlap(
+                (int) $request->roomtype_id,
+                $request->StartDate,
+                $request->EndDate,
+                (int) $request->id
+            )) {
+                DB::rollBack();
+                return $response;
+            }
+
             $pricingPlan->update([
                 'NameAr'    => $request->NameAr,
                 'NameEn'    => $request->NameEn,
@@ -237,7 +305,10 @@ class RoomTypesController extends Controller
         try {
             DB::beginTransaction();
 
-            $roomTypePricing = RoomtypePricingplan::findOrFail($request->id);
+            $roomTypePricing = RoomtypePricingplan::with('pricingplan')->findOrFail($request->id);
+            if ($roomTypePricing->pricingplan && $this->isPricingPlanExpired($roomTypePricing->pricingplan)) {
+                return Failed('Cannot delete an expired pricing plan.');
+            }
             $pricingPlanId = $roomTypePricing->pricingplan_id;
             $roomTypePricing->delete();
 

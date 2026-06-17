@@ -23,13 +23,19 @@ class ClientsController extends Controller
             }
 
             if ($search) {
-                $query->where(function($q) use ($search) {
-                    $q->where('first_name', 'like', "%$search%")
-                      ->orWhere('last_name', 'like', "%$search%")
-                      ->orWhere('mobile', 'like', "%$search%")
-                      ->orWhere('email', 'like', "%$search%")
-                      ->orWhere('IdNumber', 'like', "%$search%")
-                      ->orWhere('id', 'like', "%$search%");
+                $term = trim($search);
+                $query->where(function ($q) use ($term) {
+                    $q->where('first_name', 'like', "%{$term}%")
+                        ->orWhere('last_name', 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT(first_name, ' ', last_name) like ?", ["%{$term}%"])
+                        ->orWhere('mobile', 'like', "%{$term}%")
+                        ->orWhere('email', 'like', "%{$term}%")
+                        ->orWhere('IdNumber', 'like', "%{$term}%")
+                        ->orWhere('international_code', 'like', "%{$term}%");
+
+                    if (ctype_digit($term)) {
+                        $q->orWhere('id', (int) $term);
+                    }
                 });
             }
 

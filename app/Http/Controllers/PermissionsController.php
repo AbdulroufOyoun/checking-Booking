@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Permission;
-use Illuminate\Http\Request;
+use App\Models\User;
 use App\Http\Requests\Permission\UpdatePermissionRequest;
 use App\Http\Requests\Permission\DeletePermissionRequest;
-use App\Models\PermissionCategory;
+use App\Http\Requests\Permission\AddUserPermissionRequest;
 
 class PermissionsController extends Controller
 {
@@ -44,6 +44,20 @@ class PermissionsController extends Controller
             $permission = Permission::findOrFail($request->id);
             $permission->delete();
             return \Success('Permission deleted successfully');
+        } catch (\Exception $e) {
+            return \Failed($e->getMessage());
+        }
+    }
+
+    public function addUserPermission(AddUserPermissionRequest $request)
+    {
+        try {
+            $user = User::findOrFail($request->user_id);
+            $permissionNames = Permission::whereIn('id', $request->permission_ids)->pluck('name')->all();
+            $user->syncPermissions($permissionNames);
+            $user->load(['permissions', 'roles']);
+
+            return \SuccessData('User permissions updated successfully', $user);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }

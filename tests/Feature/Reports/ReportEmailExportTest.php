@@ -1,0 +1,168 @@
+<?php
+
+namespace Tests\Feature\Reports;
+
+use App\Mail\ReportReadyMail;
+use App\Models\ReportExport;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
+
+class ReportEmailExportTest extends TestCase
+{
+
+    public function test_user_can_queue_email_export_with_custom_recipient(): void
+    {
+        $user = $this->userWithApiPermissions(['view reports', 'view financial reports']);
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/users/reports/revenue-summary/email-request', [
+            'email' => 'finance@hotel.test',
+            'format' => 'excel',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $response->assertStatus(202);
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.export.email', 'finance@hotel.test');
+        $response->assertJsonPath('data.export.format', 'excel');
+        $response->assertJsonPath('data.export.status', ReportExport::STATUS_PENDING);
+
+        $this->assertDatabaseHas('report_exports', [
+            'user_id' => $user->id,
+            'slug' => 'revenue-summary',
+            'recipient_email' => 'finance@hotel.test',
+            'status' => ReportExport::STATUS_PENDING,
+        ]);
+
+        ReportExport::query()
+            ->where('recipient_email', 'finance@hotel.test')
+            ->where('status', ReportExport::STATUS_PENDING)
+            ->latest('id')
+            ->first()
+            ?->delete();
+    }
+
+    public function test_process_pending_command_generates_file_and_marks_ready(): void
+    {
+        Mail::fake();
+        Storage::fake('local');
+
+        $user = $this->userWithApiPermissions(['view reports', 'view financial reports']);
+
+        $export = ReportExport::create([
+            'user_id' => $user->id,
+            'slug' => 'occupancy',
+            'file_format' => ReportExport::FORMAT_EXCEL,
+            'recipient_email' => 'ops@hotel.test',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-07',
+            'status' => ReportExport::STATUS_PENDING,
+            'download_token' => ReportExport::generateToken(),
+        ]);
+
+        try {
+            $this->artisan('reports:process-pending', ['--limit' => 1])
+                ->assertExitCode(0);
+
+            $export->refresh();
+            $this->assertSame(ReportExport::STATUS_READY, $export->status);
+            $this->assertNotNull($export->file_path);
+            $this->assertStringEndsWith('.xlsx', $export->file_path);
+            Storage::disk('local')->assertExists($export->file_path);
+
+            Mail::assertSent(ReportReadyMail::class, function (ReportReadyMail $mail) use ($export) {
+                return $mail->hasTo('ops@hotel.test')
+                    && $mail->export->id === $export->id;
+            });
+        } finally {
+            if ($export->file_path) {
+                Storage::disk('local')->delete($export->file_path);
+            }
+            $export->delete();
+        }
+    }
+
+    public function test_process_pending_command_generates_pdf_file(): void
+    {
+        Mail::fake();
+        Storage::fake('local');
+
+        $user = $this->userWithApiPermissions(['view reports', 'view financial reports']);
+
+        $export = ReportExport::create([
+            'user_id' => $user->id,
+            'slug' => 'occupancy',
+            'file_format' => ReportExport::FORMAT_PDF,
+            'recipient_email' => 'ops@hotel.test',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-07',
+            'status' => ReportExport::STATUS_PENDING,
+            'download_token' => ReportExport::generateToken(),
+        ]);
+
+        try {
+            $this->artisan('reports:process-pending', ['--limit' => 1])
+                ->assertExitCode(0);
+
+            $export->refresh();
+            $this->assertSame(ReportExport::STATUS_READY, $export->status);
+            $this->assertStringEndsWith('.pdf', $export->file_path);
+            Storage::disk('local')->assertExists($export->file_path);
+        } finally {
+            if ($export->file_path) {
+                Storage::disk('local')->delete($export->file_path);
+            }
+            $export->delete();
+        }
+    }
+
+    public function test_download_with_valid_token_returns_file(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('reports/test.xlsx', 'fake-xlsx');
+
+        $user = $this->userWithApiPermissions(['view reports']);
+        $token = ReportExport::generateToken();
+
+        $export = ReportExport::create([
+            'user_id' => $user->id,
+            'slug' => 'occupancy',
+            'file_format' => ReportExport::FORMAT_EXCEL,
+            'recipient_email' => 'ops@hotel.test',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-07',
+            'status' => ReportExport::STATUS_READY,
+            'file_path' => 'reports/test.xlsx',
+            'download_token' => $token,
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $response = $this->get('/api/users/reports/exports/' . $export->id . '/download?token=' . $token);
+
+        $response->assertOk();
+        $response->assertHeader('content-disposition');
+
+        $export->delete();
+    }
+
+    public function test_report_response_is_paginated_at_fifty_rows(): void
+    {
+        config(['reports.page_size' => 50]);
+
+        $user = $this->userWithApiPermissions(['view reports', 'view financial reports']);
+
+        $response = $this->actingAs($user, 'api')->getJson(
+            '/api/users/reports/reservations-list?start_date=2026-08-01&end_date=2026-08-31&page=1'
+        );
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.per_page', 50);
+        $response->assertJsonPath('data.current_page', 1);
+        $this->assertLessThanOrEqual(50, count($response->json('data.rows') ?? []));
+        $this->assertArrayHasKey('total_rows', $response->json('data'));
+        $this->assertArrayHasKey('last_page', $response->json('data'));
+        $this->assertArrayHasKey('is_truncated', $response->json('data'));
+    }
+}
