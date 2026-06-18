@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Reservation;
-use App\Models\ReservationDailyCharge;
 use App\Models\ReservationPay;
 use App\Services\RevenueAccrualService;
 use App\Services\RoomOccupancyService;
@@ -35,6 +34,12 @@ class DashboardController extends Controller
                 false
             );
 
+            $monthRoomNights = (int) ($monthRevenue['current']['count'] ?? 0);
+            $monthAccrualBase = (float) ($monthRevenue['current']['total_base'] ?? 0);
+            $avgDailyRate = $monthRoomNights > 0
+                ? round($monthAccrualBase / $monthRoomNights, 2)
+                : 0.0;
+
             $cash = $this->earningsForPeriod($monthStart, $monthEnd);
 
             $weeklyAccrual = $this->weeklyAccrual($today);
@@ -53,7 +58,9 @@ class DashboardController extends Controller
                 'arrivals_today' => $this->occupancyService->arrivalsToday($today),
                 'departures_today' => $this->occupancyService->departuresToday($today),
                 'month_accrual_revenue' => round($monthRevenue['current']['total'] ?? 0, 2),
-                'month_accrual_base' => round($monthRevenue['current']['total_base'] ?? 0, 2),
+                'month_accrual_base' => round($monthAccrualBase, 2),
+                'month_room_nights' => $monthRoomNights,
+                'avg_daily_rate' => $avgDailyRate,
                 'month_cash_in' => round($cash['total_in'], 2),
                 'month_cash_out' => round($cash['total_out'], 2),
                 'month_cash_net' => round($cash['net_earnings'], 2),
@@ -72,13 +79,16 @@ class DashboardController extends Controller
 
         for ($i = 6; $i >= 0; $i--) {
             $day = $today->copy()->subDays($i);
-            $labels[] = $day->format('D');
-            $values[] = round((float) ReservationDailyCharge::query()
-                ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
-                ->where('reservations.reservation_status', 1)
-                ->whereDate('reservation_daily_charges.charge_date', $day->toDateString())
-                ->selectRaw('SUM(reservation_daily_charges.base_amount) as day_base')
-                ->value('day_base') ?? 0, 2);
+            $dayRevenue = $this->revenueAccrualService->calculate(
+                'total',
+                null,
+                $day->copy()->startOfDay(),
+                $day->copy()->startOfDay(),
+                false
+            );
+
+            $labels[] = $day->toDateString();
+            $values[] = round((float) ($dayRevenue['current']['total'] ?? 0), 2);
         }
 
         return [

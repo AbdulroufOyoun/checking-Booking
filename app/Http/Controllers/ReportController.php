@@ -35,7 +35,6 @@ class ReportController extends Controller
             ['slug' => 'journal-entries', 'category' => 'accounting'],
             ['slug' => 'general-ledger', 'category' => 'accounting'],
             ['slug' => 'trial-balance', 'category' => 'accounting'],
-            ['slug' => 'profit-loss', 'category' => 'accounting'],
             ['slug' => 'balance-sheet', 'category' => 'accounting'],
             ['slug' => 'cash-flow', 'category' => 'accounting'],
             ['slug' => 'financial-audit-log', 'category' => 'accounting'],

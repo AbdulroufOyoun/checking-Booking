@@ -98,7 +98,6 @@ class ReportsFinancialConsistencyTest extends TestCase
             'peak-analysis',
             'revpar',
             'trial-balance',
-            'profit-loss',
             'balance-sheet',
             'cash-flow',
             'general-ledger',

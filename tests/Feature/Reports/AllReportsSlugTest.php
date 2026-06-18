@@ -30,7 +30,6 @@ class AllReportsSlugTest extends TestCase
             ['closing-package'],
             ['general-ledger'],
             ['trial-balance'],
-            ['profit-loss'],
             ['balance-sheet'],
             ['cash-flow'],
             ['financial-audit-log'],

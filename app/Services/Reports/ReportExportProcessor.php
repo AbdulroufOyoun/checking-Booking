@@ -14,7 +14,6 @@ class ReportExportProcessor
         'journal-entries',
         'general-ledger',
         'trial-balance',
-        'profit-loss',
         'balance-sheet',
         'cash-flow',
         'financial-audit-log',
@@ -119,7 +118,7 @@ class ReportExportProcessor
             'accrual-revenue', 'cash-box', 'revenue-summary', 'accrual-cash-reconciliation',
             'ar-aging', 'adjustments', 'tax', 'revpar', 'by-dimension', 'peak-analysis',
             'payments-refunds', 'closing-package', 'chart-of-accounts', 'journal-entries',
-            'general-ledger', 'trial-balance', 'profit-loss', 'balance-sheet', 'cash-flow',
+            'general-ledger', 'trial-balance', 'balance-sheet', 'cash-flow',
             'financial-audit-log',
         ];
     }

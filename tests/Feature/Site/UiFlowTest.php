@@ -54,7 +54,7 @@ class UiFlowTest extends TestCase
         $user = $this->admin();
         $slugs = [
             'arrivals-departures', 'occupancy', 'revenue-summary', 'accrual-cash-reconciliation',
-            'ar-aging', 'payments-refunds', 'trial-balance', 'profit-loss',
+            'ar-aging', 'payments-refunds', 'trial-balance',
         ];
 
         foreach ($slugs as $slug) {

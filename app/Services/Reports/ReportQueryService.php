@@ -55,7 +55,6 @@ class ReportQueryService
             'closing-package' => $this->closingPackage($start, $end),
             'general-ledger' => $this->generalLedger($start, $end, $params),
             'trial-balance' => $this->trialBalance($start, $end),
-            'profit-loss' => $this->profitAndLoss($start, $end),
             'balance-sheet' => $this->balanceSheet($end),
             'cash-flow' => $this->cashFlow($start, $end),
             'financial-audit-log' => $this->financialAuditLog($start, $end),
@@ -1202,47 +1201,6 @@ class ReportQueryService
                 ['label' => 'Total debit', 'value' => $data['totals']['debit']],
                 ['label' => 'Total credit', 'value' => $data['totals']['credit']],
                 ['label' => 'Balanced', 'value' => $data['totals']['balanced'] ? 'Yes' : 'No'],
-            ],
-            $this->periodMeta($start, $end)
-        );
-    }
-
-    private function profitAndLoss(Carbon $start, Carbon $end): array
-    {
-        $data = $this->financialStatementService->profitAndLoss($start, $end);
-
-        $rows = [];
-
-        foreach ($data['revenue'] as $item) {
-            $rows[] = [
-                'section' => 'Revenue',
-                'code' => $item['code'],
-                'name' => $item['name'],
-                'amount' => $item['amount'],
-            ];
-        }
-
-        foreach ($data['expenses'] as $item) {
-            $rows[] = [
-                'section' => 'Expense',
-                'code' => $item['code'],
-                'name' => $item['name'],
-                'amount' => $item['amount'],
-            ];
-        }
-
-        return $this->format(
-            [
-                ['key' => 'section', 'label' => 'Section'],
-                ['key' => 'code', 'label' => 'Code'],
-                ['key' => 'name', 'label' => 'Account'],
-                ['key' => 'amount', 'label' => 'Amount'],
-            ],
-            $rows,
-            [
-                ['label' => 'Total revenue', 'value' => $data['totals']['revenue']],
-                ['label' => 'Total expenses', 'value' => $data['totals']['expenses']],
-                ['label' => 'Net income', 'value' => $data['totals']['net_income']],
             ],
             $this->periodMeta($start, $end)
         );
