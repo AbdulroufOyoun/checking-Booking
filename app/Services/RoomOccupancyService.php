@@ -85,9 +85,7 @@ class RoomOccupancyService
 
     public function checkOutsToday(Carbon $date): int
     {
-        return Reservation::where('reservation_status', 1)
-            ->whereDate('expire_date', $date->toDateString())
-            ->count();
+        return $this->pendingCheckoutsQuery($date)->count();
     }
 
     public function arrivalsToday(Carbon $date): array
@@ -104,12 +102,19 @@ class RoomOccupancyService
     public function departuresToday(Carbon $date): array
     {
         return $this->formatMovementList(
-            Reservation::with(['client', 'reservationRooms.room'])
-                ->where('reservation_status', 1)
-                ->whereDate('expire_date', $date->toDateString())
+            $this->pendingCheckoutsQuery($date)
+                ->with(['client', 'reservationRooms.room', 'payments'])
                 ->orderBy('expire_date')
                 ->get()
         );
+    }
+
+    private function pendingCheckoutsQuery(Carbon $date)
+    {
+        return Reservation::query()
+            ->where('reservation_status', Reservation::STATUS_CONFIRMED)
+            ->where('logedin', Reservation::LOGEDIN_IN_HOUSE)
+            ->where('expire_date', '<=', $date->toDateString());
     }
 
     private function formatMovementList($reservations): array
@@ -124,6 +129,8 @@ class RoomOccupancyService
                 'start_date' => $r->start_date,
                 'expire_date' => $r->expire_date,
                 'logedin' => (int) $r->logedin,
+                'balance_due' => $r->balanceDue(),
+                'is_overdue' => $r->expire_date < Carbon::today()->toDateString(),
             ];
         })->values()->all();
     }
@@ -147,7 +154,12 @@ class RoomOccupancyService
                                 ->where('expire_date', '>', $dateStr);
                         })
                             ->orWhere('start_date', $dateStr)
-                            ->orWhere('expire_date', $dateStr);
+                            ->orWhere('expire_date', $dateStr)
+                            ->orWhere(function ($q4) use ($dateStr) {
+                                $q4->where('logedin', Reservation::LOGEDIN_IN_HOUSE)
+                                    ->where('start_date', '<=', $dateStr)
+                                    ->where('expire_date', '<', $dateStr);
+                            });
                     });
             })
             ->get();
@@ -219,8 +231,13 @@ class RoomOccupancyService
         $start = $reservation->start_date;
         $expire = $reservation->expire_date;
         $overlapsNight = $start <= $dateStr && $expire > $dateStr;
+        $checkedIn = (int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE;
 
-        if ($overlapsNight && (int) $reservation->logedin === 1) {
+        if ($checkedIn && $start <= $dateStr && ($overlapsNight || $expire <= $dateStr)) {
+            if ($expire === $dateStr) {
+                return 'check_out_today';
+            }
+
             return 'in_house';
         }
 

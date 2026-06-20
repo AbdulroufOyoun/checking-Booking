@@ -112,18 +112,11 @@ class ReservationController extends Controller
                 ->orderBy('charge_date')
                 ->get();
 
-            $paid = (float) $reservation->payments
-                ->where('type', ReservationPay::TYPE_PAYMENT)
-                ->sum('pay');
-            $refunded = (float) $reservation->payments
-                ->where('type', ReservationPay::TYPE_REFUND)
-                ->sum('pay');
-
             return \SuccessData('Reservation retrieved', [
                 'reservation' => $reservation,
                 'daily_charges' => $dailyCharges,
-                'paid_amount' => round($paid - $refunded, 2),
-                'balance_due' => round(max(0, (float) $reservation->total - ($paid - $refunded)), 2),
+                'paid_amount' => $reservation->paidNetAmount(),
+                'balance_due' => $reservation->balanceDue(),
             ]);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
@@ -136,17 +129,20 @@ class ReservationController extends Controller
             DB::beginTransaction();
 
             $reservation = Reservation::with(['reservationRooms.room', 'payments'])->findOrFail($id);
-            $priceMode = 0;
 
             $today = Carbon::today()->toDateString();
             $isCheckingOut = false;
+            $pendingLogedin = null;
+            $willCheckOut = $request->has('logedin')
+                && (int) $request->logedin === Reservation::LOGEDIN_NOT_IN_HOUSE
+                && (int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE;
 
             if ($request->filled('start_date') || $request->filled('expire_date')) {
                 if (Reservation::isCancelled((int) $reservation->reservation_status)) {
                     return \Failed('Cannot modify dates of a cancelled reservation.');
                 }
 
-                if ($reservation->expire_date < $today) {
+                if ($reservation->expire_date < $today && !$willCheckOut) {
                     return \Failed('Cannot modify dates of a completed stay.');
                 }
 
@@ -185,7 +181,12 @@ class ReservationController extends Controller
                 }
 
                 if ($expireDate < $today) {
-                    return \Failed('This stay has already ended. Check-in and check-out are not allowed.');
+                    if ($newLogedin === Reservation::LOGEDIN_IN_HOUSE) {
+                        return \Failed('Check-in is not allowed after the scheduled departure date.');
+                    }
+                    if ((int) $reservation->logedin !== Reservation::LOGEDIN_IN_HOUSE) {
+                        return \Failed('This stay has already ended.');
+                    }
                 }
 
                 if ($newLogedin === 1 && $reservation->start_date > $today) {
@@ -201,26 +202,7 @@ class ReservationController extends Controller
                 }
 
                 $isCheckingOut = $newLogedin === 0 && (int) $reservation->logedin === 1;
-
-                if ($isCheckingOut) {
-                    $paid = (float) $reservation->payments
-                        ->where('type', ReservationPay::TYPE_PAYMENT)
-                        ->sum('pay');
-                    $refunded = (float) $reservation->payments
-                        ->where('type', ReservationPay::TYPE_REFUND)
-                        ->sum('pay');
-                    $balance = max(0, round((float) $reservation->total - ($paid - $refunded), 2));
-                    if ($balance > 0.01) {
-                        return \Failed('Outstanding balance must be paid before check-out.');
-                    }
-                }
-
-                $reservation->logedin = $newLogedin;
-            }
-            if ($request->filled('login_time')) {
-                $reservation->login_time = $request->login_time;
-            } elseif ($request->has('logedin') && (int) $request->logedin === 1 && !$reservation->login_time) {
-                $reservation->login_time = Carbon::today()->toDateString();
+                $pendingLogedin = $newLogedin;
             }
 
             if ($request->has('discount')) {
@@ -233,41 +215,29 @@ class ReservationController extends Controller
                 $reservation->penalties = (float) $request->penalties;
             }
 
-            $startDate = Carbon::parse($reservation->start_date)->startOfDay();
-            $endDate = Carbon::parse($reservation->expire_date)->startOfDay();
-            $reservation->nights = $startDate->diffInDays($endDate);
+            $this->recalculateReservationPricing($reservation);
 
-            $totalBase = 0.0;
-            foreach ($reservation->reservationRooms as $resRoom) {
-                if (!$resRoom->room) {
-                    continue;
+            if ($isCheckingOut) {
+                $balance = $reservation->balanceDue();
+                if ($balance > 0.005) {
+                    DB::rollBack();
+
+                    return \Failed(
+                        'Outstanding balance must be paid before check-out. Remaining: ' . number_format($balance, 2, '.', ''),
+                        422
+                    );
                 }
-                $lines = $this->pricingEngine->buildDailyBreakdown(
-                    $resRoom->room,
-                    $startDate->toDateString(),
-                    $endDate->toDateString(),
-                    (int) $reservation->rent_type,
-                    $priceMode
-                );
-                $roomBase = $this->pricingEngine->sumBaseAmount($lines);
-                $totalBase += $roomBase;
-
-                $this->revenueAccrualService->persistDailyCharges(
-                    $reservation->id,
-                    $resRoom->id,
-                    $resRoom->room_id,
-                    (int) $reservation->rent_type,
-                    $lines
-                );
             }
 
-            $reservation->base_price = round($totalBase, 2);
-            $reservation->subtotal = round(
-                $reservation->base_price - $reservation->discount + $reservation->extras + $reservation->penalties,
-                2
-            );
-            $reservation->taxes = round($reservation->subtotal * 0.15, 2, PHP_ROUND_HALF_UP);
-            $reservation->total = round($reservation->subtotal + $reservation->taxes, 2);
+            if ($pendingLogedin !== null) {
+                $reservation->logedin = $pendingLogedin;
+            }
+
+            if ($request->filled('login_time')) {
+                $reservation->login_time = $request->login_time;
+            } elseif ($pendingLogedin === 1 && !$reservation->login_time) {
+                $reservation->login_time = Carbon::today()->toDateString();
+            }
 
             $reservation->save();
 
@@ -478,18 +448,7 @@ class ReservationController extends Controller
                 return \Failed('Cannot add payment to a cancelled reservation.');
             }
 
-            $today = Carbon::today()->toDateString();
-            if ($reservation->expire_date < $today) {
-                return \Failed('Cannot add payment after the stay has ended.');
-            }
-
-            $paid = (float) $reservation->payments
-                ->where('type', ReservationPay::TYPE_PAYMENT)
-                ->sum('pay');
-            $refunded = (float) $reservation->payments
-                ->where('type', ReservationPay::TYPE_REFUND)
-                ->sum('pay');
-            $balanceDue = max(0, (float) $reservation->total - ($paid - $refunded));
+            $balanceDue = $reservation->balanceDue();
 
             if ((float) $request->pay > $balanceDue + 0.005) {
                 return \Failed('Payment amount exceeds the remaining balance.');
@@ -1394,6 +1353,46 @@ case 2:
     public function checkPeakMonth($Month): bool
     {
         return PeakMonth::where('month_name_en', $Month)->value('check') == 1;
+    }
+
+    private function recalculateReservationPricing(Reservation $reservation): void
+    {
+        $priceMode = (int) ($reservation->price_calculation_mode ?? 0);
+        $startDate = Carbon::parse($reservation->start_date)->startOfDay();
+        $endDate = Carbon::parse($reservation->expire_date)->startOfDay();
+        $reservation->nights = $startDate->diffInDays($endDate);
+
+        $totalBase = 0.0;
+        foreach ($reservation->reservationRooms as $resRoom) {
+            if (!$resRoom->room) {
+                continue;
+            }
+            $lines = $this->pricingEngine->buildDailyBreakdown(
+                $resRoom->room,
+                $startDate->toDateString(),
+                $endDate->toDateString(),
+                (int) $reservation->rent_type,
+                $priceMode
+            );
+            $roomBase = $this->pricingEngine->sumBaseAmount($lines);
+            $totalBase += $roomBase;
+
+            $this->revenueAccrualService->persistDailyCharges(
+                $reservation->id,
+                $resRoom->id,
+                $resRoom->room_id,
+                (int) $reservation->rent_type,
+                $lines
+            );
+        }
+
+        $reservation->base_price = round($totalBase, 2);
+        $reservation->subtotal = round(
+            $reservation->base_price - $reservation->discount + $reservation->extras + $reservation->penalties,
+            2
+        );
+        $reservation->taxes = round($reservation->subtotal * 0.15, 2, PHP_ROUND_HALF_UP);
+        $reservation->total = round($reservation->subtotal + $reservation->taxes, 2);
     }
 
     private function resolveCalendarState(Reservation $r, float $paidNet, float $balanceDue): string

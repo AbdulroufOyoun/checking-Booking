@@ -4,7 +4,6 @@ namespace Tests\Feature\Reservation;
 
 use App\Models\Reservation;
 use App\Models\ReservationPay;
-use App\Models\User;
 use Carbon\Carbon;
 use Database\Seeders\ReservationTestDataSeeder;
 use Tests\TestCase;
@@ -20,21 +19,20 @@ class PaymentTest extends TestCase
         ]);
 
         $user = $this->userWithApiPermissions();
-        $reservation = Reservation::where('reservation_status', 1)
-            ->whereDoesntHave('payments')
-            ->first();
-
-        if (!$reservation) {
-            $reservation = Reservation::where('reservation_status', 1)->first();
-        }
-
-        $this->assertNotNull($user);
-        $this->assertNotNull($reservation);
-
-        $amount = 250.50;
         $payDate = '2026-08-15';
-
         Carbon::setTestNow($payDate);
+
+        $reservation = $this->findReservationWithBalanceDue($payDate);
+        if (!$reservation) {
+            $reservation = $this->createReservationWithBalanceDue($payDate, $user);
+        }
+        $this->assertNotNull($reservation, 'No reservation with remaining balance for test date.');
+
+        $paid = (float) $reservation->payments()->where('type', ReservationPay::TYPE_PAYMENT)->sum('pay');
+        $refunded = (float) $reservation->payments()->where('type', ReservationPay::TYPE_REFUND)->sum('pay');
+        $balanceDue = max(0, (float) $reservation->total - ($paid - $refunded));
+        $amount = min(250.50, $balanceDue);
+        $this->assertGreaterThan(0, $amount, 'Reservation has no payable balance.');
 
         $before = $this->actingAs($user, 'api')->getJson(
             '/api/users/earnings-summary?start_date=2026-08-01&end_date=2026-08-31'
@@ -44,7 +42,7 @@ class PaymentTest extends TestCase
 
         $payResponse = $this->actingAs($user, 'api')->postJson(
             "/api/users/reservations/{$reservation->id}/payments",
-            ['pay' => $amount, 'type' => 0]
+            ['pay' => $amount, 'type' => ReservationPay::TYPE_PAYMENT]
         );
         $payResponse->assertStatus(200);
         $payResponse->assertJsonPath('success', true);
@@ -63,5 +61,83 @@ class PaymentTest extends TestCase
         $this->assertEqualsWithDelta($totalBefore + $amount, $totalAfter, 0.02);
 
         Carbon::setTestNow();
+    }
+
+    private function findReservationWithBalanceDue(string $asOfDate): ?Reservation
+    {
+        $candidates = Reservation::where('reservation_status', 1)
+            ->where('expire_date', '>=', $asOfDate)
+            ->with('payments')
+            ->get();
+
+        foreach ($candidates as $reservation) {
+            $paid = (float) $reservation->payments
+                ->where('type', ReservationPay::TYPE_PAYMENT)
+                ->sum('pay');
+            $refunded = (float) $reservation->payments
+                ->where('type', ReservationPay::TYPE_REFUND)
+                ->sum('pay');
+            $balanceDue = max(0, (float) $reservation->total - ($paid - $refunded));
+
+            if ($balanceDue > 0.01) {
+                return $reservation;
+            }
+        }
+
+        return null;
+    }
+
+    private function createReservationWithBalanceDue(string $asOfDate, \App\Models\User $user): ?Reservation
+    {
+        $client = \App\Models\Client::first();
+        $stayReason = \App\Models\Stay_reason::first();
+        $source = \App\Models\Reservation_source::first();
+        if (!$client || !$stayReason || !$source) {
+            return null;
+        }
+
+        $start = \Carbon\Carbon::parse($asOfDate)->addDays(5)->toDateString();
+        $end = \Carbon\Carbon::parse($start)->addDays(4)->toDateString();
+
+        $room = null;
+        foreach (\App\Models\Room::where('active', 1)->where('roomStatus', 1)->whereHas('roomType')->get() as $candidate) {
+            $overlap = \App\Models\ReservationRoom::where('room_id', $candidate->id)
+                ->whereHas('reservation', function ($query) use ($start, $end) {
+                    $query->where('start_date', '<', $end)
+                        ->where('expire_date', '>', $start);
+                })->exists();
+            if (!$overlap) {
+                $room = $candidate;
+                break;
+            }
+        }
+
+        if (!$room) {
+            return null;
+        }
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/users/makeReservation', [
+            'client_id' => $client->id,
+            'rooms' => [['room_id' => $room->id]],
+            'start_date' => $start,
+            'expire_date' => $end,
+            'reservation_type' => 0,
+            'reservation_status' => 1,
+            'stay_reason_id' => $stayReason->id,
+            'reservation_source_id' => $source->id,
+            'rent_type' => 0,
+            'price_calculation_mode' => 0,
+            'discount' => 0,
+            'extras' => 0,
+            'penalties' => 0,
+        ]);
+
+        if ($response->status() !== 200 || !$response->json('success')) {
+            return null;
+        }
+
+        $id = $response->json('data.id') ?? $response->json('data.reservation.id') ?? null;
+
+        return $id ? Reservation::with('payments')->find($id) : Reservation::with('payments')->latest('id')->first();
     }
 }

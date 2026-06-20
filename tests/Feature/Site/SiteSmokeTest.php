@@ -9,26 +9,10 @@ use Tests\TestCase;
  */
 class SiteSmokeTest extends TestCase
 {
-    private function admin(): \App\Models\User
-    {
-        return $this->userWithApiPermissions([
-            'view reports', 'view financial reports', 'view accounting reports', 'export reports',
-            'manage journal entries', 'close accounting period', 'manage chart of accounts',
-            'view users', 'manage users', 'manage roles', 'manage permissions',
-            'view buildings', 'manage buildings', 'view floors', 'manage floors',
-            'view suites', 'manage suites', 'view rooms', 'manage rooms',
-            'view room types', 'manage room types', 'manage pricing plans',
-            'manage facilities', 'manage features', 'manage stay reasons',
-            'manage discounts', 'manage taxes', 'manage job titles', 'manage departments',
-            'manage penalties', 'manage reservation sources', 'manage clients', 'manage client notes',
-            'manage guest classifications', 'manage peak days', 'manage peak months', 'manage refund policies',
-        ]);
-    }
-
     /** @dataProvider publicGetEndpointsProvider */
     public function test_authenticated_get_endpoints_respond(string $uri, array $query = []): void
     {
-        $user = $this->admin();
+        $user = $this->adminUser();
         $url = $query ? $uri . '?' . http_build_query($query) : $uri;
 
         $response = $this->actingAs($user, 'api')->getJson($url);
@@ -95,7 +79,7 @@ class SiteSmokeTest extends TestCase
 
     public function test_reservation_show_when_exists(): void
     {
-        $user = $this->admin();
+        $user = $this->adminUser();
         $reservation = \App\Models\Reservation::query()->first();
         if (!$reservation) {
             $this->markTestSkipped('No reservations in database.');
@@ -108,7 +92,7 @@ class SiteSmokeTest extends TestCase
 
     public function test_client_show_when_exists(): void
     {
-        $user = $this->admin();
+        $user = $this->adminUser();
         $client = \App\Models\Client::query()->first();
         if (!$client) {
             $this->markTestSkipped('No clients in database.');

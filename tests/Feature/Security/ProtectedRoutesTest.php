@@ -42,18 +42,6 @@ class ProtectedRoutesTest extends TestCase
         $export->delete();
     }
 
-    private function userWithOnlyPermissions(array $permissions): User
-    {
-        $user = User::first();
-        $this->assertNotNull($user);
-
-        $user->syncRoles([]);
-        $user->syncPermissions($permissions);
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-
-        return $user;
-    }
-
     public function test_add_building_forbidden_without_manage_buildings_permission(): void
     {
         $user = $this->userWithOnlyPermissions(['view buildings']);

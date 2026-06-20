@@ -29,6 +29,86 @@ class HousekeepingWorkflowTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_checkout_rejected_when_outstanding_balance(): void
+    {
+        $ctx = $this->seedAndCreateStay();
+        $user = $ctx['user'];
+        $reservation = $ctx['reservation'];
+
+        $checkIn = $this->actingAs($user, 'api')->patchJson(
+            "/api/users/reservations/{$reservation->id}",
+            ['logedin' => 1]
+        );
+        $checkIn->assertStatus(200);
+        $checkIn->assertJsonPath('data.reservation.logedin', 1);
+
+        $checkOut = $this->actingAs($user, 'api')->patchJson(
+            "/api/users/reservations/{$reservation->id}",
+            ['logedin' => 0]
+        );
+
+        $checkOut->assertStatus(422);
+        $checkOut->assertJsonPath('success', false);
+        $this->assertStringContainsString(
+            'Outstanding balance',
+            $checkOut->json('message') ?? ''
+        );
+
+        $this->assertDatabaseHas('reservations', [
+            'id' => $reservation->id,
+            'logedin' => 1,
+        ]);
+    }
+
+    public function test_payment_allowed_after_scheduled_departure(): void
+    {
+        $ctx = $this->seedAndCreateStay();
+        $user = $ctx['user'];
+        $reservation = $ctx['reservation'];
+
+        $this->actingAs($user, 'api')->patchJson(
+            "/api/users/reservations/{$reservation->id}",
+            ['logedin' => 1]
+        )->assertStatus(200);
+
+        Carbon::setTestNow('2026-06-20');
+
+        $reservation->refresh();
+        $amount = min(100.0, $reservation->balanceDue());
+
+        $response = $this->actingAs($user, 'api')->postJson(
+            "/api/users/reservations/{$reservation->id}/payments",
+            ['pay' => $amount, 'type' => 0]
+        );
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+    }
+
+    public function test_checkout_allowed_after_expire_when_fully_paid(): void
+    {
+        $ctx = $this->seedAndCreateStay();
+        $user = $ctx['user'];
+        $reservation = $ctx['reservation'];
+
+        $this->payReservationInFull($user, $reservation);
+
+        $this->actingAs($user, 'api')->patchJson(
+            "/api/users/reservations/{$reservation->id}",
+            ['logedin' => 1]
+        )->assertStatus(200);
+
+        Carbon::setTestNow('2026-06-20');
+
+        $checkOut = $this->actingAs($user, 'api')->patchJson(
+            "/api/users/reservations/{$reservation->id}",
+            ['logedin' => 0]
+        );
+
+        $checkOut->assertStatus(200);
+        $checkOut->assertJsonPath('data.reservation.logedin', 0);
+    }
+
     public function test_checkout_sets_room_to_preparation(): void
     {
         $ctx = $this->seedAndCreateStay();

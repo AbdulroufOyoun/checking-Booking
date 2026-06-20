@@ -123,4 +123,27 @@ class Reservation extends Model
     {
         return $this->hasMany(ReservationExtend::class);
     }
+
+    public function paidNetAmount(): float
+    {
+        if (!$this->relationLoaded('payments')) {
+            $this->load('payments');
+        }
+
+        $paid = (float) $this->payments
+            ->where('type', ReservationPay::TYPE_PAYMENT)
+            ->sum('pay');
+        $refunded = (float) $this->payments
+            ->where('type', ReservationPay::TYPE_REFUND)
+            ->sum('pay');
+
+        return round($paid - $refunded, 2);
+    }
+
+    public function balanceDue(?float $total = null): float
+    {
+        $totalAmount = $total ?? (float) $this->total;
+
+        return round(max(0, $totalAmount - $this->paidNetAmount()), 2);
+    }
 }

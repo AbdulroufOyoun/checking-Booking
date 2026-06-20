@@ -11,6 +11,21 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <testsuite name="Auth">
+            <directory>tests/Feature/Auth</directory>
+        </testsuite>
+        <testsuite name="Property">
+            <directory>tests/Feature/Property</directory>
+        </testsuite>
+        <testsuite name="Security">
+            <directory>tests/Feature/Security</directory>
+        </testsuite>
+        <testsuite name="Finance">
+            <directory>tests/Feature/Finance</directory>
+        </testsuite>
+        <testsuite name="Reservation">
+            <directory>tests/Feature/Reservation</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
