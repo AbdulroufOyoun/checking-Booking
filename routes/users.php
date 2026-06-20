@@ -40,6 +40,9 @@ use App\Http\Controllers\SystemHealthController;
 
 Route::post('login', [UsersController::class, 'login']);
 
+// Token-based report download (email links work without an active session).
+Route::get('reports/exports/{export}/download', [ReportExportController::class, 'download']);
+
 // Route::middleware(['can_do:manage_settings'])->group(function () {
 // });
 Route::get('login_error',[UsersController::class , 'loginError'])->name('login');
@@ -283,7 +286,6 @@ Route::middleware(['permission:view earnings,api'])->group(function () {
 Route::middleware(['permission:view reports,api'])->group(function () {
     Route::get('reports/catalog', [ReportController::class, 'catalog']);
     Route::get('reports/exports', [ReportExportController::class, 'index']);
-    Route::get('reports/exports/{export}/download', [ReportExportController::class, 'download']);
     Route::post('reports/{slug}/email-request', [ReportExportController::class, 'requestEmail']);
     Route::get('reports/{slug}', [ReportController::class, 'run']);
 });

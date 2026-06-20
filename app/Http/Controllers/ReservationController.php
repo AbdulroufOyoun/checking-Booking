@@ -88,7 +88,7 @@ class ReservationController extends Controller
                 });
             }
 
-            $reservations = $query->orderBy('created_at', 'desc')->paginate($perPage);
+            $reservations = $query->orderByDesc('start_date')->orderByDesc('id')->paginate($perPage);
 
             return \Pagination($reservations);
         } catch (\Exception $e) {
@@ -139,6 +139,7 @@ class ReservationController extends Controller
             $priceMode = 0;
 
             $today = Carbon::today()->toDateString();
+            $isCheckingOut = false;
 
             if ($request->filled('start_date') || $request->filled('expire_date')) {
                 if (Reservation::isCancelled((int) $reservation->reservation_status)) {
@@ -191,7 +192,17 @@ class ReservationController extends Controller
                     return \Failed('Check-in is not allowed before the arrival date.');
                 }
 
-                if ($newLogedin === 0 && (int) $reservation->logedin === 1) {
+                if ($newLogedin === 1) {
+                    try {
+                        $this->roomStatusService->assertRoomsReadyForCheckIn($reservation);
+                    } catch (\RuntimeException $e) {
+                        return \Failed($e->getMessage());
+                    }
+                }
+
+                $isCheckingOut = $newLogedin === 0 && (int) $reservation->logedin === 1;
+
+                if ($isCheckingOut) {
                     $paid = (float) $reservation->payments
                         ->where('type', ReservationPay::TYPE_PAYMENT)
                         ->sum('pay');
@@ -259,6 +270,17 @@ class ReservationController extends Controller
             $reservation->total = round($reservation->subtotal + $reservation->taxes, 2);
 
             $reservation->save();
+
+            if ($request->has('logedin')
+                && (int) $request->logedin === 0
+                && $isCheckingOut) {
+                foreach ($reservation->reservationRooms as $resRoom) {
+                    if ($resRoom->room_id) {
+                        $this->roomStatusService->markNeedsPreparation($resRoom->room_id);
+                    }
+                }
+            }
+
             $this->roomStatusService->syncForReservation($reservation->fresh(['reservationRooms']));
 
             DB::commit();
@@ -578,6 +600,12 @@ public function makeReservation(MakeReservationRequest $request)
         $subtotal = $totalBasePrice - $discount + $extras + $penalties;
 $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtotal + $taxes;
 
+        if ((int) ($request->logedin ?? Reservation::LOGEDIN_NOT_IN_HOUSE) === Reservation::LOGEDIN_IN_HOUSE) {
+            foreach ($roomsData as $data) {
+                $this->roomStatusService->assertRoomReadyForCheckIn($data['room']);
+            }
+        }
+
         $reservation = Reservation::create([
             'client_id'             => $request->client_id,
             'start_date'            => $request->start_date,
@@ -706,6 +734,8 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
                 }
             }
         }
+
+        $this->roomStatusService->syncForReservation($reservation->fresh(['reservationRooms']));
 
         DB::commit();
         return \SuccessData('تم إنشاء الحجز بنجاح', $reservation);
@@ -1116,7 +1146,8 @@ case 2:
     {
         try {
             $perPage = \returnPerPage();
-            $availableRoomsQuery = Room::where('building_id', '=', $request->building_id)->where("roomStatus", '=', 1)
+            $availableRoomsQuery = Room::where('building_id', '=', $request->building_id)
+                ->whereNotIn('roomStatus', [2, 4])
                 ->where('active', '=', 1);
             if ($request->filled('room_type')) {
                 $availableRoomsQuery->where('room_type_id', '=', $request->room_type);
@@ -1186,15 +1217,14 @@ case 2:
 
                 $unavailableReason = null;
                 $availableForPeriod = true;
+                $needsCleaningBeforeCheckin = (int) $room->roomStatus === 3;
 
-                if ((int) $room->roomStatus !== 1) {
+                if ((int) $room->roomStatus === 2) {
                     $availableForPeriod = false;
-                    $unavailableReason = match ((int) $room->roomStatus) {
-                        2 => 'occupied',
-                        3 => 'preparation',
-                        4 => 'out_of_service',
-                        default => 'out_of_service',
-                    };
+                    $unavailableReason = 'occupied';
+                } elseif ((int) $room->roomStatus === 4) {
+                    $availableForPeriod = false;
+                    $unavailableReason = 'out_of_service';
                 } elseif ($reservation) {
                     $availableForPeriod = false;
                     $unavailableReason = 'booked';
@@ -1228,6 +1258,7 @@ case 2:
                     ] : null,
                     'available_for_period' => $availableForPeriod,
                     'unavailable_reason' => $unavailableReason,
+                    'needs_cleaning_before_checkin' => $needsCleaningBeforeCheckin,
                     'conflict' => $reservation ? [
                         'reservation_id' => $reservation->id,
                         'start_date' => $reservation->start_date,

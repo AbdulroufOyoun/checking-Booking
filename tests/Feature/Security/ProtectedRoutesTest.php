@@ -18,10 +18,28 @@ class ProtectedRoutesTest extends TestCase
         $this->getJson('/api/users/reservations/1')->assertStatus(401);
     }
 
-    public function test_report_export_download_requires_authentication(): void
+    public function test_report_export_download_rejects_invalid_token(): void
     {
-        $this->getJson('/api/users/reports/exports/1/download?token=invalid')
-            ->assertStatus(401);
+        $user = User::first();
+        $this->assertNotNull($user);
+
+        $export = \App\Models\ReportExport::create([
+            'user_id' => $user->id,
+            'slug' => 'occupancy',
+            'file_format' => \App\Models\ReportExport::FORMAT_EXCEL,
+            'recipient_email' => 'ops@hotel.test',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-07',
+            'status' => \App\Models\ReportExport::STATUS_READY,
+            'file_path' => 'reports/missing.xlsx',
+            'download_token' => \App\Models\ReportExport::generateToken(),
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $this->getJson('/api/users/reports/exports/' . $export->id . '/download?token=invalid')
+            ->assertStatus(403);
+
+        $export->delete();
     }
 
     private function userWithOnlyPermissions(array $permissions): User
