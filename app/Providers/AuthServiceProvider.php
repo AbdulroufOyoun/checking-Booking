@@ -22,5 +22,9 @@ class AuthServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerPolicies();
+
+        if (class_exists(Passport::class)) {
+            Passport::loadKeysFrom(storage_path());
+        }
     }
 }

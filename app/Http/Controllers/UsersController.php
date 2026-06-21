@@ -27,24 +27,142 @@ class UsersController extends Controller
      */
     public function login(LoginRequest $request)
     {
-        $arr = Arr::only($request->validated(), ['job_number', 'password' ]);
-        $where = ['job_number' => $arr['job_number']];
-        $user = User::where($where)->first();
-        if (!$user) {
-            return \Failed('Invalid job number');
+        try {
+            $arr = Arr::only($request->validated(), ['job_number', 'password']);
+            $where = ['job_number' => $arr['job_number']];
+            $user = User::where($where)->first();
+            if (!$user) {
+                return \Failed('Invalid job number', 401);
+            }
+            if (!$user->active) {
+                return \Failed('This account is disActive', 403);
+            }
+            if (!Hash::check($arr['password'], $user->password)) {
+                return \Failed('Wrong Password', 401);
+            }
+
+            $token = $user->createToken('authToken');
+            $user->setAttribute('token', $token);
+            $user->load(['roles.permissions', 'permissions']);
+
+            return \SuccessData('Logged In Success', new LoginResource($user));
+        } catch (\Throwable $e) {
+            report($e);
+
+            $message = config('app.debug')
+                ? $e->getMessage()
+                : 'Login failed. Run server setup: php artisan migrate --force && php artisan passport:keys && php artisan hotel:ensure-admin';
+
+            return \Failed($message, 500);
         }
-        if (!$user->active) {
-            return \Failed('This account is disActive');
-        }
-        if (!Hash::check($arr['password'], $user->password)) {
-            return \Failed('Wrong Password');
+    }
+
+    /**
+     * Public pre-flight check for production deployment (no auth).
+     */
+    public function setupCheck()
+    {
+        $checks = [];
+
+        $checks[] = [
+            'name' => 'php_pdo_extension',
+            'status' => extension_loaded('pdo') && extension_loaded('pdo_mysql') ? 'pass' : 'fail',
+            'message' => sprintf(
+                'PHP %s (%s) | pdo=%s | pdo_mysql=%s | ini=%s',
+                PHP_VERSION,
+                php_sapi_name(),
+                extension_loaded('pdo') ? 'yes' : 'NO',
+                extension_loaded('pdo_mysql') ? 'yes' : 'NO',
+                php_ini_loaded_file() ?: 'unknown'
+            ),
+        ];
+
+        if (!extension_loaded('pdo') || !extension_loaded('pdo_mysql')) {
+            return \SuccessData('Setup check', [
+                'ready' => false,
+                'checks' => $checks,
+                'action_required' => 'Enable PHP extensions pdo and pdo_mysql in cPanel → Select PHP Version (PHP 8.2+) for subdomain hotelsystemback. Then open /check-php.php to verify. Contact host if toggles are missing.',
+            ], 503);
         }
 
-        $token = $user->createToken('authToken');
-        $user->setAttribute('token', $token);
-        $user->load(['roles.permissions', 'permissions']);
+        $checks[] = $this->setupCheckItem('database', function () {
+            \Illuminate\Support\Facades\DB::connection()->getPdo();
 
-        return \SuccessData('Logged In Success', new LoginResource($user));
+            return 'Connected';
+        });
+
+        $checks[] = $this->setupCheckItem('users_table', function () {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('users')) {
+                throw new \RuntimeException('Missing users table — run php artisan migrate --force');
+            }
+
+            return User::count() . ' users';
+        });
+
+        $checks[] = $this->setupCheckItem('passport_private_key', function () {
+            $path = storage_path('oauth-private.key');
+            if (!is_readable($path)) {
+                throw new \RuntimeException('Missing storage/oauth-private.key — run php artisan passport:keys');
+            }
+
+            return 'Found';
+        });
+
+        $checks[] = $this->setupCheckItem('passport_public_key', function () {
+            $path = storage_path('oauth-public.key');
+            if (!is_readable($path)) {
+                throw new \RuntimeException('Missing storage/oauth-public.key — run php artisan passport:keys');
+            }
+
+            return 'Found';
+        });
+
+        $checks[] = $this->setupCheckItem('passport_personal_client', function () {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('oauth_clients')) {
+                throw new \RuntimeException('Missing oauth tables — run php artisan migrate --force');
+            }
+
+            $hasClient = \Laravel\Passport\Client::query()
+                ->where('personal_access_client', true)
+                ->exists();
+            if (!$hasClient) {
+                throw new \RuntimeException('No Passport personal client — run php artisan hotel:ensure-admin');
+            }
+
+            return 'Configured';
+        });
+
+        $checks[] = $this->setupCheckItem('permission_tables', function () {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('permissions')) {
+                throw new \RuntimeException('Missing permission tables — run php artisan migrate --force && db:seed');
+            }
+
+            return 'Found';
+        });
+
+        $failed = collect($checks)->where('status', 'fail')->count();
+
+        return \SuccessData('Setup check', [
+            'ready' => $failed === 0,
+            'checks' => $checks,
+        ], $failed === 0 ? 200 : 503);
+    }
+
+    private function setupCheckItem(string $name, callable $fn): array
+    {
+        try {
+            return [
+                'name' => $name,
+                'status' => 'pass',
+                'message' => (string) $fn(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'name' => $name,
+                'status' => 'fail',
+                'message' => $e->getMessage(),
+            ];
+        }
     }
 
     /**

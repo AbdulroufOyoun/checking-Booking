@@ -39,6 +39,7 @@ use App\Http\Controllers\RolesController;
 use App\Http\Controllers\SystemHealthController;
 
 Route::post('login', [UsersController::class, 'login'])->middleware('throttle:login');
+Route::get('setup-check', [UsersController::class, 'setupCheck']);
 
 // Token-based report download (email links work without an active session).
 Route::get('reports/exports/{export}/download', [ReportExportController::class, 'download']);
