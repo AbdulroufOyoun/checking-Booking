@@ -40,6 +40,7 @@ class RbacMatrixTest extends TestCase
     ): void {
         $user = $this->userWithOnlyPermissions([]);
 
+        $query = $this->resolveSmokeQuery($query);
         $url = $query ? $uri . '?' . http_build_query($query) : $uri;
         $response = $this->actingAs($user, 'api')->getJson($url);
 
@@ -55,6 +56,7 @@ class RbacMatrixTest extends TestCase
     ): void {
         $user = $this->userWithOnlyPermissions([$permission]);
 
+        $query = $this->resolveSmokeQuery($query);
         $url = $query ? $uri . '?' . http_build_query($query) : $uri;
         $response = $this->actingAs($user, 'api')->getJson($url);
 

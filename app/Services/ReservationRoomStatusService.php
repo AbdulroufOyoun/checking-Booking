@@ -18,6 +18,12 @@ class ReservationRoomStatusService
     {
         $reservation->loadMissing('reservationRooms');
 
+        if (Reservation::isCancelled((int) $reservation->reservation_status)) {
+            $this->releaseRoomsAfterCancellation($reservation, false);
+
+            return;
+        }
+
         foreach ($reservation->reservationRooms as $resRoom) {
             if (!$resRoom->room_id) {
                 continue;
@@ -26,6 +32,28 @@ class ReservationRoomStatusService
             if ((int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE
                 && (int) $reservation->reservation_status === Reservation::STATUS_CONFIRMED) {
                 Room::where('id', $resRoom->room_id)->update(['roomStatus' => self::ROOM_OCCUPIED]);
+            }
+        }
+    }
+
+    /**
+     * Free room inventory after cancellation / refund.
+     *
+     * @param  bool  $needsPreparation  When true (e.g. guest was in-house), mark for cleaning instead of available.
+     */
+    public function releaseRoomsAfterCancellation(Reservation $reservation, bool $needsPreparation = false): void
+    {
+        $reservation->loadMissing('reservationRooms');
+
+        foreach ($reservation->reservationRooms as $resRoom) {
+            if (!$resRoom->room_id) {
+                continue;
+            }
+
+            if ($needsPreparation) {
+                $this->markNeedsPreparation($resRoom->room_id);
+            } else {
+                $this->setAvailableIfNoActiveStay($resRoom->room_id, $reservation->id);
             }
         }
     }

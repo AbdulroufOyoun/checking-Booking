@@ -48,6 +48,18 @@ trait InteractsWithApi
         return $user;
     }
 
+    protected function resolveSmokeQuery(array $query): array
+    {
+        if (array_key_exists('client_id', $query)) {
+            $client = \App\Models\Client::query()->first();
+            if ($client) {
+                $query['client_id'] = $client->id;
+            }
+        }
+
+        return $query;
+    }
+
     protected function assertApiSuccess(TestResponse $response, int $status = 200): void
     {
         $response->assertStatus($status);

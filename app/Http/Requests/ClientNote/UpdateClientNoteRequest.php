@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\ClientNote;
 
+use App\Models\ClientNote;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateClientNoteRequest extends FormRequest
 {
@@ -14,7 +16,7 @@ class UpdateClientNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'id' => 'required|exists:client_notes,id',
+            'id' => ['required', Rule::exists(ClientNote::class, 'id')],
             'title' => 'nullable|string|max:255',
             'description' => 'nullable|string',
         ];

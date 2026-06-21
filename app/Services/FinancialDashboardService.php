@@ -314,24 +314,18 @@ class FinancialDashboardService
      */
     private function cashForPeriod(Carbon $start, Carbon $end): array
     {
-        $totalIn = (float) ReservationPay::query()
-            ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->whereIn('reservations.reservation_status', [1, 2])
+        $totalIn = (float) \App\Support\ReservationCashQuery::paymentQuery()
             ->whereBetween('reservation_pay.created_at', [
                 $start->copy()->startOfDay(),
                 $end->copy()->endOfDay(),
             ])
-            ->where('reservation_pay.type', ReservationPay::TYPE_PAYMENT)
             ->sum('reservation_pay.pay');
 
-        $totalOut = (float) ReservationPay::query()
-            ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->whereIn('reservations.reservation_status', [1, 2])
+        $totalOut = (float) \App\Support\ReservationCashQuery::refundQuery()
             ->whereBetween('reservation_pay.created_at', [
                 $start->copy()->startOfDay(),
                 $end->copy()->endOfDay(),
             ])
-            ->where('reservation_pay.type', ReservationPay::TYPE_REFUND)
             ->sum('reservation_pay.pay');
 
         return [

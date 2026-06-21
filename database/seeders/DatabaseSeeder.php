@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             ChartOfAccountsSeeder::class,
             PeakDayAndMonthSeeder::class,
+            RefundPolicySeeder::class,
             AdminSeeder::class,
         ];
 

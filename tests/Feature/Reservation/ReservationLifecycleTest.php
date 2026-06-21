@@ -9,6 +9,7 @@ use App\Models\ReservationRoom;
 use App\Models\Reservation_source;
 use App\Models\Room;
 use App\Models\Stay_reason;
+use App\Services\ReservationRoomStatusService;
 use Carbon\Carbon;
 use Database\Seeders\ReservationTestDataSeeder;
 use Tests\TestCase;
@@ -44,6 +45,49 @@ class ReservationLifecycleTest extends TestCase
         $this->assertApiSuccess($response);
         $reservation->refresh();
         $this->assertTrue(Reservation::isCancelled((int) $reservation->reservation_status));
+    }
+
+    public function test_cancel_releases_room_for_new_booking(): void
+    {
+        $reservation = $this->createFutureReservation();
+        if (!$reservation) {
+            $this->markTestSkipped('Could not create future reservation.');
+        }
+
+        $reservationRoom = ReservationRoom::where('reservation_id', $reservation->id)->first();
+        $this->assertNotNull($reservationRoom);
+
+        $room = Room::findOrFail($reservationRoom->room_id);
+        Room::where('id', $room->id)->update(['roomStatus' => ReservationRoomStatusService::ROOM_OCCUPIED]);
+
+        $user = $this->userWithOnlyPermissions(['view reservations', 'cancel reservations', 'create reservations']);
+
+        $cancel = $this->actingAs($user, 'api')->postJson(
+            "/api/users/reservations/{$reservation->id}/cancel",
+            ['reason' => 'Guest request']
+        );
+        $this->assertApiSuccess($cancel);
+
+        $room->refresh();
+        $this->assertEquals(
+            ReservationRoomStatusService::ROOM_AVAILABLE,
+            (int) $room->roomStatus,
+            'Cancelled reservation must release room operational status.'
+        );
+
+        $availability = $this->actingAs($user, 'api')->getJson(
+            '/api/users/booking-room-availability?' . http_build_query([
+                'start_date' => $reservation->start_date,
+                'expire_date' => $reservation->expire_date,
+                'building_id' => $room->building_id,
+            ])
+        );
+        $availability->assertStatus(200);
+
+        $rows = collect($availability->json('data.rooms') ?? []);
+        $row = $rows->firstWhere('id', $room->id);
+        $this->assertNotNull($row);
+        $this->assertTrue($row['available_for_period'], 'Room should be bookable after cancel.');
     }
 
     public function test_cancel_requires_permission(): void
@@ -122,7 +166,7 @@ class ReservationLifecycleTest extends TestCase
             'amount' => 100,
         ]);
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
         $response->assertJsonPath('success', false);
     }
 

@@ -13,6 +13,7 @@ class SiteSmokeTest extends TestCase
     public function test_authenticated_get_endpoints_respond(string $uri, array $query = []): void
     {
         $user = $this->adminUser();
+        $query = $this->resolveSmokeQuery($query);
         $url = $query ? $uri . '?' . http_build_query($query) : $uri;
 
         $response = $this->actingAs($user, 'api')->getJson($url);

@@ -12,6 +12,10 @@ class RefundPolicyResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'rent_type' => $this->rent_type,
+            'timing' => $this->timing,
+            'days_threshold' => $this->days_threshold,
+            'refund_basis' => $this->refund_basis,
             'days_before_checkin' => $this->days_before_checkin,
             'refund_percent' => $this->refund_percent,
             'payment_status' => $this->payment_status,

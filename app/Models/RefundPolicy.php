@@ -11,6 +11,10 @@ class RefundPolicy extends Model
 
     protected $fillable = [
         'name',
+        'rent_type',
+        'timing',
+        'days_threshold',
+        'refund_basis',
         'days_before_checkin',
         'refund_percent',
         'payment_status',

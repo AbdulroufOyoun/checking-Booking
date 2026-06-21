@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\ClientNote;
 
+use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreClientNoteRequest extends FormRequest
 {
@@ -14,7 +16,7 @@ class StoreClientNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'client_id' => 'required|exists:clients,id',
+            'client_id' => ['required', Rule::exists(Client::class, 'id')],
             'title' => 'required|string|max:255',
             'description' => 'required|string',
         ];

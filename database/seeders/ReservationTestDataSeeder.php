@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Client;
 use App\Models\PeakDay;
+use App\Models\PeakMonth;
 use App\Models\Pricingplan;
 use App\Models\Reservation;
 use App\Models\ReservationPay;
@@ -46,6 +47,7 @@ class ReservationTestDataSeeder extends Seeder
         $clients = $this->ensureClients();
         $roomType = $this->ensureRoomType();
         $this->ensurePricingPlan($roomType);
+        $this->ensurePeakMonthsForPricingTests();
         $rooms = $this->ensureRooms($roomType);
 
         $this->enableFridayPeak();
@@ -342,6 +344,12 @@ class ReservationTestDataSeeder extends Seeder
                 'active_type'       => 1,
             ]
         );
+    }
+
+    private function ensurePeakMonthsForPricingTests(): void
+    {
+        PeakMonth::whereIn('month_name_en', ['June', 'July', 'August', 'December'])
+            ->update(['check' => 1]);
     }
 
     private function ensurePricingPlan(RoomType $roomType): void

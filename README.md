@@ -1,6 +1,6 @@
 ## Hotel System API (checking-Booking)
 
-**Stack:** Laravel **11.x**, PHP **8.2+**, Passport 12, Spatie Permission 6.
+**Stack:** Laravel **12.x**, PHP **8.2+**, Passport 12, Spatie Permission 6, Laravel Boost 2.
 
 Demo setup, seeded data, and login: see **[DEMO.md](DEMO.md)** and **[../DEMO_RUNBOOK.md](../DEMO_RUNBOOK.md)**.
 

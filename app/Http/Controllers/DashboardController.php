@@ -99,18 +99,13 @@ class DashboardController extends Controller
 
     private function earningsForPeriod(Carbon $start, Carbon $end): array
     {
-        $payments = ReservationPay::join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->whereIn('reservations.reservation_status', [1, 2])
+        $payments = \App\Support\ReservationCashQuery::paymentQuery()
             ->whereBetween('reservation_pay.created_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
-            ->where('reservation_pay.type', ReservationPay::TYPE_PAYMENT)
             ->selectRaw('COALESCE(SUM(pay), 0) as total_in')
             ->value('total_in');
 
-        $refunds = DB::table('reservation_pay')
-            ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->whereIn('reservations.reservation_status', [1, 2])
+        $refunds = \App\Support\ReservationCashQuery::refundQuery()
             ->whereBetween('reservation_pay.created_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
-            ->where('reservation_pay.type', ReservationPay::TYPE_REFUND)
             ->selectRaw('COALESCE(SUM(pay), 0) as total_out')
             ->value('total_out');
 

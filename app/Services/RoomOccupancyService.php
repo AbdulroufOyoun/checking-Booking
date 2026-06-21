@@ -217,6 +217,10 @@ class RoomOccupancyService
         }
 
         if (!$reservation) {
+            if ($roomStatus === 2) {
+                return 'preparation';
+            }
+
             return 'vacant';
         }
 

@@ -318,14 +318,17 @@ Route::middleware(['permission:view revenue,api'])->group(function () {
     Route::get('revenue/roomtype/{entity_id}', [RevenueController::class, 'getRoomTypeRevenue']);
 });
 
-Route::middleware(['permission:manage refunds,api'])->post('refund', [ReservationController::class, 'refund']);
-
-Route::middleware(['permission:view users,api'])->get('system/health', [SystemHealthController::class, 'index']);
+Route::middleware(['permission:manage refunds,api'])->group(function () {
+    Route::post('refund', [ReservationController::class, 'refund']);
+    Route::get('refund-policies/preview', [RefundPolicyController::class, 'preview']);
+});
 
 Route::middleware(['permission:manage refund policies,api'])->group(function () {
     Route::apiResource('refund-policies', RefundPolicyController::class);
     Route::delete('refund-policies', [RefundPolicyController::class, 'destroy']);
 });
+
+Route::middleware(['permission:view users,api'])->get('system/health', [SystemHealthController::class, 'index']);
 
 Route::middleware(['permission:manage client notes,api'])->group(function () {
     Route::get('client-notes', [ClientNoteController::class, 'index']);

@@ -10,7 +10,6 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomtypePricingplan;
 use App\Models\Suite;
-use App\Models\RefundPolicy;
 use App\Models\ReservationPay;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +31,8 @@ use App\Services\PricingEngine;
 use App\Services\RevenueAccrualService;
 use App\Services\ReservationRoomStatusService;
 use App\Services\Accounting\AccountingPostingService;
+use App\Services\RefundPolicyService;
+use App\Exceptions\RefundNotAllowedException;
 use App\Http\Requests\Reservation\CancelReservationRequest;
 use App\Http\Requests\Reservation\ExtendReservationRequest;
 use Carbon\CarbonPeriod;
@@ -42,7 +43,8 @@ class ReservationController extends Controller
         private PricingEngine $pricingEngine,
         private RevenueAccrualService $revenueAccrualService,
         private ReservationRoomStatusService $roomStatusService,
-        private AccountingPostingService $accountingPostingService
+        private AccountingPostingService $accountingPostingService,
+        private RefundPolicyService $refundPolicyService
     ) {
     }
 
@@ -112,11 +114,19 @@ class ReservationController extends Controller
                 ->orderBy('charge_date')
                 ->get();
 
+            $roomNumbers = $reservation->reservationRooms
+                ->map(fn ($row) => $row->room?->number)
+                ->filter(fn ($n) => $n !== null && $n !== '')
+                ->values()
+                ->all();
+
             return \SuccessData('Reservation retrieved', [
                 'reservation' => $reservation,
                 'daily_charges' => $dailyCharges,
                 'paid_amount' => $reservation->paidNetAmount(),
                 'balance_due' => $reservation->balanceDue(),
+                'room_numbers' => $roomNumbers,
+                'room_numbers_label' => $roomNumbers !== [] ? implode(', ', array_map('strval', $roomNumbers)) : null,
             ]);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
@@ -714,52 +724,9 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
             DB::beginTransaction();
             $reservation = Reservation::with(['payments', 'client'])->findOrFail($request->reservation_id);
 
-            if (Reservation::isCancelled((int) $reservation->reservation_status)) {
-                return \Failed('Reservation already cancelled, cannot refund');
-            }
-
-            $paymentsIn = $reservation->payments()->where('type', ReservationPay::TYPE_PAYMENT)->sum('pay');
-            $refundsOut = $reservation->payments()->where('type', ReservationPay::TYPE_REFUND)->sum('pay');
-            $netPaid = $paymentsIn - $refundsOut;
-
-            if ($netPaid <= 0) {
-                return \Failed('No payments available for refund');
-            }
-
-            $now = Carbon::now();
-            $startDate = Carbon::parse($reservation->start_date);
-            $expireDate = Carbon::parse($reservation->expire_date);
-
-            $daysBeforeCheckin = (int) $now->diffInDays($startDate, false);
-
-            $duringStay = $now->betweenIncluded($startDate, $expireDate) ? 1 : 0;
-
-            if ($netPaid >= $reservation->total) {
-                $paymentStatus = 2;
-            } elseif ($netPaid > 0) {
-                $paymentStatus = 1;
-            } else {
-                $paymentStatus = 0;
-            }
-
-            $policyQuery = RefundPolicy::where('during_stay', $duringStay)
-                ->where('payment_status', $paymentStatus)
-                ->where('days_before_checkin', '>=', $daysBeforeCheckin)
-                ->orderBy('days_before_checkin', 'asc')
-                ->first();
-
-            if (!$policyQuery) {
-                $errorMsg = "No refund policy applies to your case. Days remaining: " . $daysBeforeCheckin . ", payment status: " . $paymentStatus;
-                return \Failed($errorMsg);
-            }
-
-            $refundAmount = ($reservation->total * $policyQuery->refund_percent) / 100;
-
-            $finalRefundAmount = min($refundAmount, $netPaid);
-
-            if ($finalRefundAmount <= 0) {
-                return \Failed('Based on cancellation policy, no refund amount due at this time.');
-            }
+            $preview = $this->refundPolicyService->preview($reservation);
+            $finalRefundAmount = $preview['refund_amount'];
+            $policyQuery = $preview['policy'];
 
             $refundPay = ReservationPay::create([
                 'reservation_id' => $reservation->id,
@@ -770,7 +737,15 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
 
             $this->accountingPostingService->postPayment($refundPay);
 
-            $reservation->update(['reservation_status' => Reservation::STATUS_CANCELLED]);
+            $wasInHouse = (int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE;
+            $reservation->update([
+                'reservation_status' => Reservation::STATUS_CANCELLED,
+                'logedin' => Reservation::LOGEDIN_NOT_IN_HOUSE,
+            ]);
+            $this->roomStatusService->releaseRoomsAfterCancellation(
+                $reservation->fresh(['reservationRooms']),
+                $wasInHouse
+            );
 
             DB::commit();
 
@@ -778,10 +753,15 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
                 'refund_id' => $refundPay->id,
                 'amount' => $finalRefundAmount,
                 'policy_name' => $policyQuery->name,
-                'days_calculated' => $daysBeforeCheckin
+                'breakdown' => $preview['breakdown'],
             ]);
+        } catch (RefundNotAllowedException $e) {
+            DB::rollBack();
+
+            return \Failed($e->getMessage(), 422);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return \Failed($e->getMessage());
         }
     }
@@ -1178,7 +1158,7 @@ case 2:
                 $availableForPeriod = true;
                 $needsCleaningBeforeCheckin = (int) $room->roomStatus === 3;
 
-                if ((int) $room->roomStatus === 2) {
+                if ((int) $room->roomStatus === 2 && $reservation) {
                     $availableForPeriod = false;
                     $unavailableReason = 'occupied';
                 } elseif ((int) $room->roomStatus === 4) {

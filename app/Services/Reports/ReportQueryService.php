@@ -1047,7 +1047,7 @@ class ReportQueryService
     {
         $payments = ReservationPay::with(['reservation.client', 'user'])
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->whereIn('reservations.reservation_status', Reservation::cashReportStatuses())
+            ->whereIn('reservations.reservation_status', \App\Support\ReservationCashQuery::cashMovementStatuses())
             ->whereBetween('reservation_pay.created_at', [
                 $start->copy()->startOfDay(),
                 $end->copy()->endOfDay(),

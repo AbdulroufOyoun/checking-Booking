@@ -499,7 +499,7 @@ class HotelDemoSeeder extends Seeder
 
     private function seedClientNotes(): void
     {
-        if (!Schema::hasTable('client_notes')) {
+        if (! Schema::connection('mysql2')->hasTable('client_notes')) {
             return;
         }
 
