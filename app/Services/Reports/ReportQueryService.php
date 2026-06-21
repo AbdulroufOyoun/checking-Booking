@@ -376,15 +376,27 @@ class ReportQueryService
         $singleDay = $startStr === $endStr;
 
         $baseQuery = fn () => Reservation::with(['client', 'reservationRooms.room'])
-            ->whereNotIn('reservation_status', [Reservation::STATUS_PENDING_PAYMENT, Reservation::STATUS_CANCELLED]);
+            ->excludingCancelled();
 
+        if ($singleDay) {
+            return $this->arrivalsDeparturesSingleDay($baseQuery, $startStr, $start, $end);
+        }
+
+        return $this->arrivalsDeparturesDateRange($baseQuery, $startStr, $endStr, $start, $end);
+    }
+
+    /**
+     * Single day: separate movement rows (arrival / departure / stayover) for front-desk checklist.
+     */
+    private function arrivalsDeparturesSingleDay(callable $baseQuery, string $day, Carbon $start, Carbon $end): array
+    {
         $arrivals = $baseQuery()
-            ->whereBetween('start_date', [$startStr, $endStr])
+            ->whereDate('start_date', $day)
             ->orderBy('start_date')
             ->get();
 
         $departures = $baseQuery()
-            ->whereBetween('expire_date', [$startStr, $endStr])
+            ->whereDate('expire_date', $day)
             ->orderBy('expire_date')
             ->get();
 
@@ -398,18 +410,14 @@ class ReportQueryService
             $rows[] = $this->movementRow($reservation, 'Departure', $reservation->expire_date);
         }
 
-        $stayoverCount = 0;
-        if ($singleDay) {
-            $stayovers = $baseQuery()
-                ->where('start_date', '<', $startStr)
-                ->where('expire_date', '>', $startStr)
-                ->orderBy('start_date')
-                ->get();
+        $stayovers = $baseQuery()
+            ->where('start_date', '<', $day)
+            ->where('expire_date', '>', $day)
+            ->orderBy('start_date')
+            ->get();
 
-            foreach ($stayovers as $reservation) {
-                $rows[] = $this->movementRow($reservation, 'Stayover', $startStr);
-                $stayoverCount++;
-            }
+        foreach ($stayovers as $reservation) {
+            $rows[] = $this->movementRow($reservation, 'Stayover', $day);
         }
 
         usort($rows, function ($a, $b) {
@@ -420,15 +428,6 @@ class ReportQueryService
 
             return strcmp((string) $a['movement_type'], (string) $b['movement_type']);
         });
-
-        $summary = [
-            ['label' => 'Arrivals', 'value' => $arrivals->count()],
-            ['label' => 'Departures', 'value' => $departures->count()],
-        ];
-        if ($singleDay) {
-            $summary[] = ['label' => 'Stayovers', 'value' => $stayoverCount];
-        }
-        $summary[] = ['label' => 'Total movements', 'value' => count($rows)];
 
         return $this->format(
             [
@@ -442,12 +441,84 @@ class ReportQueryService
                 ['key' => 'checked_in', 'label' => 'In house'],
             ],
             $rows,
-            $summary,
+            [
+                ['label' => 'Arrivals', 'value' => $arrivals->count()],
+                ['label' => 'Departures', 'value' => $departures->count()],
+                ['label' => 'Stayovers', 'value' => $stayovers->count()],
+                ['label' => 'Reservations', 'value' => collect($rows)->pluck('reservation_id')->unique()->count()],
+            ],
             array_merge(
                 $this->periodMeta($start, $end),
-                $singleDay
-                    ? ['Single day: includes arrivals, departures, and stayovers (matches calendar occupancy for that date).']
-                    : []
+                ['Single day: arrivals, departures, and stayovers (matches calendar for that date).']
+            )
+        );
+    }
+
+    /**
+     * Date range: one row per reservation overlapping the period (matches reservations table).
+     */
+    private function arrivalsDeparturesDateRange(callable $baseQuery, string $startStr, string $endStr, Carbon $start, Carbon $end): array
+    {
+        $reservations = $baseQuery()
+            ->where('start_date', '<=', $endStr)
+            ->where('expire_date', '>=', $startStr)
+            ->orderBy('start_date')
+            ->orderBy('id')
+            ->get();
+
+        $arrivalCount = 0;
+        $departureCount = 0;
+        $rows = [];
+
+        foreach ($reservations as $reservation) {
+            $hasArrival = $reservation->start_date >= $startStr && $reservation->start_date <= $endStr;
+            $hasDeparture = $reservation->expire_date >= $startStr && $reservation->expire_date <= $endStr;
+
+            if ($hasArrival) {
+                $arrivalCount++;
+            }
+            if ($hasDeparture) {
+                $departureCount++;
+            }
+
+            $types = [];
+            if ($hasArrival) {
+                $types[] = 'Arrival';
+            }
+            if ($hasDeparture) {
+                $types[] = 'Departure';
+            }
+            if ($types === []) {
+                $types[] = 'In-house';
+            }
+
+            $movementDate = $hasArrival
+                ? $reservation->start_date
+                : ($hasDeparture ? $reservation->expire_date : $startStr);
+
+            $rows[] = $this->movementRow($reservation, implode(' & ', $types), $movementDate);
+        }
+
+        return $this->format(
+            [
+                ['key' => 'movement_type', 'label' => 'Type'],
+                ['key' => 'movement_date', 'label' => 'Date'],
+                ['key' => 'reservation_id', 'label' => 'Reservation #'],
+                ['key' => 'guest', 'label' => 'Guest'],
+                ['key' => 'room', 'label' => 'Room'],
+                ['key' => 'start_date', 'label' => 'Check-in'],
+                ['key' => 'expire_date', 'label' => 'Check-out'],
+                ['key' => 'checked_in', 'label' => 'In house'],
+            ],
+            $rows,
+            [
+                ['label' => 'Reservations', 'value' => $reservations->count()],
+                ['label' => 'Arrivals', 'value' => $arrivalCount],
+                ['label' => 'Departures', 'value' => $departureCount],
+            ],
+            array_merge(
+                $this->periodMeta($start, $end),
+                ['One row per reservation in the period (same overlap rules as the reservations list).']
             )
         );
     }
@@ -471,7 +542,7 @@ class ReportQueryService
     private function reservationsList(Carbon $start, Carbon $end): array
     {
         $reservations = Reservation::with(['client', 'reservationRooms.room'])
-            ->whereNotIn('reservation_status', [Reservation::STATUS_PENDING_PAYMENT, Reservation::STATUS_CANCELLED])
+            ->excludingCancelled()
             ->where('start_date', '<=', $end->toDateString())
             ->where('expire_date', '>=', $start->toDateString())
             ->orderBy('start_date')

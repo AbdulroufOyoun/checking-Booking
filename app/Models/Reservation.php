@@ -53,6 +53,12 @@ class Reservation extends Model
         return [self::STATUS_UNCONFIRMED, self::STATUS_CONFIRMED];
     }
 
+    /** Exclude cancelled reservations (matches reservations list / table). */
+    public function scopeExcludingCancelled($query)
+    {
+        return $query->where('reservation_status', '!=', self::STATUS_CANCELLED);
+    }
+
     protected $fillable = [
         'client_id',
         'start_date',

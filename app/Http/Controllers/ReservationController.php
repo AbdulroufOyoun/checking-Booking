@@ -52,7 +52,8 @@ class ReservationController extends Controller
     {
         try {
             $perPage = \returnPerPage();
-            $query = Reservation::with(['client', 'reservationRooms.room.roomType', 'payments']);
+            $query = Reservation::with(['client', 'reservationRooms.room.roomType', 'payments'])
+                ->excludingCancelled();
 
             if ($request->filled('reservation_status')) {
                 $query->where('reservation_status', (int) $request->reservation_status);
@@ -280,6 +281,7 @@ class ReservationController extends Controller
             $to = $request->input('date_to', Carbon::today()->endOfMonth()->toDateString());
 
             $query = Reservation::with(['client', 'reservationRooms.room', 'payments'])
+                ->excludingCancelled()
                 ->where('start_date', '<=', $to)
                 ->where('expire_date', '>=', $from);
 
