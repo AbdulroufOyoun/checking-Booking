@@ -24,6 +24,7 @@ use App\Http\Controllers\GuestFeaturesController;
 use App\Http\Controllers\GuestClassificationFeaturesController;
 use App\Http\Controllers\ClientClassificationsController;
 use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\CollectionsController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\EarningController;
 use App\Http\Controllers\RevenueController;
@@ -42,7 +43,8 @@ Route::post('login', [UsersController::class, 'login'])->middleware('throttle:lo
 Route::get('setup-check', [UsersController::class, 'setupCheck']);
 
 // Token-based report download (email links work without an active session).
-Route::get('reports/exports/{export}/download', [ReportExportController::class, 'download']);
+Route::get('reports/exports/{export}/download', [ReportExportController::class, 'download'])
+    ->middleware('throttle:report-download');
 
 // Route::middleware(['can_do:manage_settings'])->group(function () {
 // });
@@ -250,6 +252,15 @@ Route::middleware(['permission:manage guest classifications,api'])->group(functi
 
 
 //=========================================Reservation=============================================
+Route::middleware(['permission:view payments,api'])->group(function () {
+    Route::get('collections/summary', [CollectionsController::class, 'summary']);
+    Route::get('collections', [CollectionsController::class, 'index']);
+});
+
+Route::middleware(['permission:update reservations,api'])->group(function () {
+    Route::post('collections/collect-all', [CollectionsController::class, 'collectAll']);
+});
+
 Route::middleware(['permission:view reservations,api'])->group(function () {
     Route::get('reservations', [ReservationController::class, 'index']);
     Route::get('reservations/calendar', [ReservationController::class, 'calendar']);
@@ -287,6 +298,7 @@ Route::middleware(['permission:view earnings,api'])->group(function () {
 Route::middleware(['permission:view reports,api'])->group(function () {
     Route::get('reports/catalog', [ReportController::class, 'catalog']);
     Route::get('reports/exports', [ReportExportController::class, 'index']);
+    Route::get('reports/{slug}/download', [ReportExportController::class, 'downloadNow']);
     Route::post('reports/{slug}/email-request', [ReportExportController::class, 'requestEmail']);
     Route::get('reports/{slug}', [ReportController::class, 'run']);
 });

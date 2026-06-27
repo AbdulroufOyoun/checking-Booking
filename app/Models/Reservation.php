@@ -59,6 +59,87 @@ class Reservation extends Model
         return $query->where('reservation_status', '!=', self::STATUS_CANCELLED);
     }
 
+    /** Non-cancelled reservations overlapping a calendar day (matches list/calendar filter). */
+    public function scopeOverlappingDate($query, string $date)
+    {
+        return $query->where('start_date', '<=', $date)
+            ->where('expire_date', '>=', $date);
+    }
+
+    public static function countActiveOnDate(string $date): int
+    {
+        return (int) static::query()->excludingCancelled()->overlappingDate($date)->count();
+    }
+
+    /** Reservations with outstanding balance (total − net payments > 0). */
+    public function scopeWithPositiveBalance($query)
+    {
+        $paymentType = ReservationPay::TYPE_PAYMENT;
+        $refundType = ReservationPay::TYPE_REFUND;
+
+        return $query->whereRaw(
+            '(reservations.total - COALESCE((
+                SELECT SUM(CASE WHEN rp.type = ? THEN rp.pay WHEN rp.type = ? THEN -rp.pay ELSE 0 END)
+                FROM reservation_pay rp
+                WHERE rp.reservation_id = reservations.id
+            ), 0)) > ?',
+            [$paymentType, $refundType, 0.005]
+        );
+    }
+
+    /**
+     * Confirmed stays, plus pending-payment stays that are fully paid (data safety net).
+     */
+    public function scopeAccrualEligible($query)
+    {
+        $paymentType = ReservationPay::TYPE_PAYMENT;
+        $refundType = ReservationPay::TYPE_REFUND;
+
+        return $query->where(function ($q) use ($paymentType, $refundType) {
+            $q->where('reservations.reservation_status', self::STATUS_CONFIRMED)
+                ->orWhere(function ($pending) use ($paymentType, $refundType) {
+                    $pending->where('reservations.reservation_status', self::STATUS_PENDING_PAYMENT)
+                        ->whereRaw(
+                            '(reservations.total - COALESCE((
+                                SELECT SUM(CASE WHEN rp.type = ? THEN rp.pay WHEN rp.type = ? THEN -rp.pay ELSE 0 END)
+                                FROM reservation_pay rp
+                                WHERE rp.reservation_id = reservations.id
+                            ), 0)) <= ?',
+                            [$paymentType, $refundType, 0.005]
+                        );
+                });
+        });
+    }
+
+    public function guestDisplayName(): string
+    {
+        if (!$this->relationLoaded('client')) {
+            $this->load('client');
+        }
+
+        $name = trim(($this->client->first_name ?? '') . ' ' . ($this->client->last_name ?? ''));
+
+        return $name !== '' ? $name : '—';
+    }
+
+    public function syncConfirmationIfFullyPaid(): bool
+    {
+        $this->loadMissing('payments');
+
+        if ((int) $this->reservation_status !== self::STATUS_PENDING_PAYMENT) {
+            return false;
+        }
+
+        if ($this->balanceDue() > 0.005) {
+            return false;
+        }
+
+        $this->reservation_status = self::STATUS_CONFIRMED;
+        $this->save();
+
+        return true;
+    }
+
     protected $fillable = [
         'client_id',
         'start_date',

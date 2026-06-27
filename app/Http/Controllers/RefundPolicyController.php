@@ -7,6 +7,7 @@ use App\Http\Requests\RefundPolicy\DestroyRefundPolicyRequest;
 use App\Http\Requests\RefundPolicy\PreviewRefundPolicyRequest;
 use App\Http\Requests\RefundPolicy\StoreRefundPolicyRequest;
 use App\Http\Requests\RefundPolicy\UpdateRefundPolicyRequest;
+use App\Http\Resources\RefundPolicy\RefundPolicyResource;
 use App\Models\RefundPolicy;
 use App\Models\Reservation;
 use App\Services\RefundPolicyService;
@@ -34,23 +35,27 @@ class RefundPolicyController extends Controller
         try {
             $policy = RefundPolicy::create($request->validated());
 
-            return \SuccessData('Refund policy created', $policy);
+            return \SuccessData('Refund policy created', (new RefundPolicyResource($policy))->resolve());
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }
     }
 
-    public function show(RefundPolicy $policy)
+    public function show(RefundPolicy $refund_policy)
     {
-        return \SuccessData('Refund policy found', $policy);
+        return \SuccessData('Refund policy found', (new RefundPolicyResource($refund_policy))->resolve());
     }
 
-    public function update(UpdateRefundPolicyRequest $request, RefundPolicy $policy)
+    public function update(UpdateRefundPolicyRequest $request, RefundPolicy $refund_policy)
     {
         try {
-            $policy->update($request->validated());
+            $refund_policy->update($request->validated());
+            $refund_policy->refresh();
 
-            return \SuccessData('Refund policy updated', $policy->fresh());
+            return \SuccessData(
+                'Refund policy updated',
+                (new RefundPolicyResource($refund_policy))->resolve()
+            );
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }

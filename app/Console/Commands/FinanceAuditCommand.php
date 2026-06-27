@@ -183,6 +183,104 @@ class FinanceAuditCommand extends Command
         }
 
         $this->line('');
+        $this->info('8) GL accrual vs RevenueAccrualService (August 2026)');
+        $balances = app(\App\Services\Accounting\FinancialStatementService::class)
+            ->accountBalances(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
+        $byCode = $balances->keyBy('code');
+        $glRevenue = round((float) ($byCode->get('4010')->balance ?? 0), 2);
+        $glVat = round((float) ($byCode->get('2150')->balance ?? 0), 2);
+        $augSub = round((float) $aug['current']['subtotal'], 2);
+        $augTax = round((float) $aug['current']['tax'], 2);
+        if (abs($glRevenue - $augSub) < 0.20) {
+            $this->info("PASS: GL room revenue {$glRevenue} ≈ accrual subtotal {$augSub}");
+            $results['pass']++;
+        } else {
+            $this->error("FAIL: GL revenue {$glRevenue} vs accrual subtotal {$augSub}");
+            $results['fail']++;
+        }
+        if (abs($glVat - $augTax) < 0.20) {
+            $this->info("PASS: GL VAT {$glVat} ≈ accrual tax {$augTax}");
+            $results['pass']++;
+        } else {
+            $this->error("FAIL: GL VAT {$glVat} vs accrual tax {$augTax}");
+            $results['fail']++;
+        }
+
+        $trial = app(\App\Services\Accounting\FinancialStatementService::class)
+            ->trialBalance(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
+        if ($trial['totals']['balanced']) {
+            $this->info('PASS: Trial balance balanced for August 2026');
+            $results['pass']++;
+        } else {
+            $this->error('FAIL: Trial balance not balanced for August 2026');
+            $results['fail']++;
+        }
+
+        $this->line('');
+        $this->info('9) Closing package vs services (August 2026)');
+        $closing = app(\App\Services\Reports\ReportQueryService::class)->run('closing-package', [
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+        $rows = collect($closing['rows'] ?? [])->keyBy('metric');
+        $cashAug = app(\App\Services\Reports\ReportVerificationService::class);
+        $golden = $cashAug->dumpGolden(Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31'));
+        $closingAr = (float) ($rows->get('Accounts receivable (open balances)')['amount'] ?? 0);
+        $closingTax = (float) ($rows->get('Tax (accrual)')['amount'] ?? 0);
+        $closingCash = (float) ($rows->get('Cash net')['amount'] ?? 0);
+        if (abs($closingAr - $golden['ar_total']) < 0.20) {
+            $this->info("PASS: Closing package AR {$closingAr} ≈ {$golden['ar_total']}");
+            $results['pass']++;
+        } else {
+            $this->error("FAIL: Closing AR {$closingAr} vs {$golden['ar_total']}");
+            $results['fail']++;
+        }
+        if (abs($closingTax - $golden['accrual_tax']) < 0.20) {
+            $this->info("PASS: Closing package tax matches accrual");
+            $results['pass']++;
+        } else {
+            $this->error('FAIL: Closing package tax');
+            $results['fail']++;
+        }
+        if (abs($closingCash - $golden['cash_net']) < 0.20) {
+            $this->info('PASS: Closing package cash net matches');
+            $results['pass']++;
+        } else {
+            $this->error('FAIL: Closing package cash net');
+            $results['fail']++;
+        }
+
+        $this->line('');
+        $this->info('10) Trial balance report vs service');
+        $tbReport = app(\App\Services\Reports\ReportQueryService::class)->run('trial-balance', [
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+        $balancedLabel = collect($tbReport['summary'] ?? [])->firstWhere('label', 'Balanced')['value'] ?? 'No';
+        if (($balancedLabel === 'Yes') === $trial['totals']['balanced']) {
+            $this->info('PASS: Trial balance report balanced flag matches service');
+            $results['pass']++;
+        } else {
+            $this->error('FAIL: Trial balance report balanced flag');
+            $results['fail']++;
+        }
+
+        $this->line('');
+        $this->info('11) AR aging vs dashboard AR balance');
+        $arReport = app(\App\Services\Reports\ReportQueryService::class)->run('ar-aging', [
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+        $arTotal = (float) (collect($arReport['summary'] ?? [])->firstWhere('label', 'Total AR')['value'] ?? 0);
+        if (abs($arTotal - $golden['ar_total']) < 0.20) {
+            $this->info("PASS: AR aging {$arTotal} ≈ expected AR {$golden['ar_total']}");
+            $results['pass']++;
+        } else {
+            $this->error("FAIL: AR aging {$arTotal} vs {$golden['ar_total']}");
+            $results['fail']++;
+        }
+
+        $this->line('');
         $this->summary($results);
 
         return $results['fail'] > 0 ? self::FAILURE : self::SUCCESS;

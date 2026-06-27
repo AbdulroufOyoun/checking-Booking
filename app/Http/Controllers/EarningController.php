@@ -51,7 +51,12 @@ class EarningController extends Controller
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $startDate = Carbon::parse($request->start_date);
             $endDate = Carbon::parse($request->end_date);
-$query->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()]);
+            $bounds = ReservationCashQuery::cashPeriodBounds($startDate, $endDate);
+            if ($bounds === null) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereBetween('reservation_pay.created_at', $bounds);
+            }
         }
 
         if ($request->type === 'in') {
@@ -105,22 +110,36 @@ $query->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $e
      */
     private function getEarningsSummary(Carbon $startDate, Carbon $endDate)
     {
+        $bounds = ReservationCashQuery::cashPeriodBounds($startDate, $endDate);
+        if ($bounds === null) {
+            return [
+                'total_in' => 0,
+                'total_out' => 0,
+                'net_earnings' => 0,
+                'count_in' => 0,
+                'count_out' => 0,
+                'total_rows' => 0,
+            ];
+        }
+
+        [$periodStart, $periodEnd] = $bounds;
+
         $payments = ReservationCashQuery::paymentQuery()
-            ->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->selectRaw('SUM(pay) as total_in, COUNT(*) as count_in')
             ->first();
 
         $refunds = ReservationCashQuery::refundQuery()
-            ->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->selectRaw('SUM(pay) as total_out, COUNT(*) as count_out')
             ->first();
 
         $totalRows = ReservationPay::query()
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
             ->whereIn('reservations.reservation_status', ReservationCashQuery::cashMovementStatuses())
-            ->whereBetween('reservation_pay.created_at', [$startDate->startOfDay(), $endDate->endOfDay()])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->count();
-            // return [ $payments->total_in ?? 0 - ($refunds->total_out ?? 0)];
+
         return [
             'total_in' => $payments->total_in ?? 0,
             'total_out' => $refunds->total_out ?? 0,

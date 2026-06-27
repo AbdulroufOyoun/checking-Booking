@@ -140,6 +140,38 @@ class UsersController extends Controller
             return 'Found';
         });
 
+        $checks[] = [
+            'name' => 'app_debug',
+            'status' => config('app.debug') ? 'warn' : 'pass',
+            'message' => config('app.debug') ? 'APP_DEBUG=true — disable in production' : 'APP_DEBUG=false',
+        ];
+
+        $checks[] = [
+            'name' => 'frontend_url',
+            'status' => env('FRONTEND_URL') ? 'pass' : 'warn',
+            'message' => env('FRONTEND_URL') ?: 'FRONTEND_URL not set — CORS may fail after config:cache',
+        ];
+
+        $checks[] = $this->setupCheckItem('refund_policies', function () {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('refund_policies')) {
+                throw new \RuntimeException('Missing refund_policies table — run migrate');
+            }
+            $count = \App\Models\RefundPolicy::count();
+            if ($count < 1) {
+                throw new \RuntimeException('No refund policies — run php artisan db:seed --class=RefundPolicySeeder --force');
+            }
+
+            return $count . ' policies';
+        });
+
+        $checks[] = [
+            'name' => 'mail_smtp',
+            'status' => $this->isMailConfiguredForSetup() ? 'pass' : 'warn',
+            'message' => $this->isMailConfiguredForSetup()
+                ? 'SMTP configured'
+                : 'Mail not configured — email report delivery disabled',
+        ];
+
         $failed = collect($checks)->where('status', 'fail')->count();
 
         return \SuccessData('Setup check', [
@@ -163,6 +195,13 @@ class UsersController extends Controller
                 'message' => $e->getMessage(),
             ];
         }
+    }
+
+    private function isMailConfiguredForSetup(): bool
+    {
+        return !empty(config('mail.mailers.smtp.host'))
+            && !empty(config('mail.from.address'))
+            && config('mail.default') !== 'log';
     }
 
     /**

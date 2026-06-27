@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Client;
 use App\Models\Reservation;
 use App\Models\ReservationDailyCharge;
+use App\Models\ReservationPay;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +26,8 @@ class RevenueAccrualService
     ): array {
         $charges = $this->queryCharges($scope, $entityId, $startDate, $endDate)->get();
 
-        $allocated = $this->allocateCharges($charges);
+        $clientNames = $this->loadClientNamesById($charges);
+        $allocated = $this->allocateCharges($charges, $clientNames);
 
         $nightlyBase = 0.0;
         $monthlyBase = 0.0;
@@ -41,6 +44,7 @@ class RevenueAccrualService
                 $details[] = [
                     'charge_date' => $row->charge_date,
                     'reservation_id' => $row->reservation_id,
+                    'guest' => $row->guest ?? '—',
                     'room_id' => $row->room_id,
                     'room_number' => $row->room_number,
                     'base_amount' => round($row->period_base, 2),
@@ -82,6 +86,14 @@ class RevenueAccrualService
 
     private function queryCharges(string $scope, ?int $entityId, Carbon $startDate, Carbon $endDate)
     {
+        $rangeStart = $startDate->toDateString();
+        $recognizedEnd = $endDate->copy()->startOfDay();
+        $today = Carbon::today()->startOfDay();
+        if ($recognizedEnd->gt($today)) {
+            $recognizedEnd = $today;
+        }
+        $rangeEnd = $recognizedEnd->toDateString();
+
         $query = ReservationDailyCharge::query()
             ->select([
                 'reservation_daily_charges.*',
@@ -89,15 +101,35 @@ class RevenueAccrualService
                 'reservations.extras',
                 'reservations.penalties',
                 'reservations.base_price as reservation_base_price',
+                'reservations.total as reservation_total',
                 'rooms.number as room_number',
+                'reservations.client_id',
             ])
             ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
             ->join('rooms', 'reservation_daily_charges.room_id', '=', 'rooms.id')
-            ->where('reservations.reservation_status', 1)
-            ->whereBetween('reservation_daily_charges.charge_date', [
-                $startDate->toDateString(),
-                $endDate->toDateString(),
-            ]);
+            ->where(function ($eligible) {
+                $paymentType = ReservationPay::TYPE_PAYMENT;
+                $refundType = ReservationPay::TYPE_REFUND;
+
+                $eligible->where('reservations.reservation_status', Reservation::STATUS_CONFIRMED)
+                    ->orWhere(function ($pending) use ($paymentType, $refundType) {
+                        $pending->where('reservations.reservation_status', Reservation::STATUS_PENDING_PAYMENT)
+                            ->whereRaw(
+                                '(reservations.total - COALESCE((
+                                    SELECT SUM(CASE WHEN rp.type = ? THEN rp.pay WHEN rp.type = ? THEN -rp.pay ELSE 0 END)
+                                    FROM reservation_pay rp
+                                    WHERE rp.reservation_id = reservations.id
+                                ), 0)) <= ?',
+                                [$paymentType, $refundType, 0.005]
+                            );
+                    });
+            });
+
+        if ($rangeStart > $rangeEnd) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereBetween('reservation_daily_charges.charge_date', [$rangeStart, $rangeEnd]);
+        }
 
         $this->applyScope($query, $scope, $entityId);
 
@@ -131,7 +163,30 @@ class RevenueAccrualService
     /**
      * @return array<int, object>
      */
-    private function allocateCharges(Collection $charges): array
+    /**
+     * @return array<int, string>
+     */
+    private function loadClientNamesById(Collection $charges): array
+    {
+        $clientIds = $charges->pluck('client_id')->unique()->filter()->values();
+        if ($clientIds->isEmpty()) {
+            return [];
+        }
+
+        return Client::query()
+            ->whereIn('id', $clientIds)
+            ->get()
+            ->mapWithKeys(fn (Client $client) => [
+                $client->id => trim(($client->first_name ?? '') . ' ' . ($client->last_name ?? '')) ?: '—',
+            ])
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>  $clientNames
+     * @return array<int, object>
+     */
+    private function allocateCharges(Collection $charges, array $clientNames = []): array
     {
         if ($charges->isEmpty()) {
             return [];
@@ -159,10 +214,12 @@ class RevenueAccrualService
             $periodSubtotal = $periodBase - $discountAlloc + $extrasAlloc + $penaltiesAlloc;
             $periodTax = round($periodSubtotal * self::TAX_RATE, 2);
             $periodRevenue = $periodSubtotal + $periodTax;
+            $guest = $clientNames[(int) $charge->client_id] ?? '—';
 
             $result[] = (object) [
                 'charge_date' => $charge->charge_date->format('Y-m-d'),
                 'reservation_id' => $charge->reservation_id,
+                'guest' => $guest,
                 'room_id' => $charge->room_id,
                 'room_number' => $charge->room_number,
                 'rent_type' => $charge->rent_type,
@@ -180,6 +237,32 @@ class RevenueAccrualService
         }
 
         return $result;
+    }
+
+    /**
+     * Accrual revenue totals grouped by charge date (single DB read for the range).
+     *
+     * @return array<string, float> date => revenue
+     */
+    public function dailyRevenueTotals(Carbon $startDate, Carbon $endDate): array
+    {
+        $charges = $this->queryCharges('total', null, $startDate, $endDate)->get();
+        $clientNames = $this->loadClientNamesById($charges);
+        $allocated = $this->allocateCharges($charges, $clientNames);
+
+        $byDate = [];
+        foreach ($allocated as $row) {
+            $day = $row->charge_date;
+            $byDate[$day] = ($byDate[$day] ?? 0.0) + (float) $row->period_revenue;
+        }
+
+        foreach ($byDate as $day => $total) {
+            $byDate[$day] = round($total, 2);
+        }
+
+        ksort($byDate);
+
+        return $byDate;
     }
 
     public function persistDailyCharges(

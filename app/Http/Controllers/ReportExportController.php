@@ -11,6 +11,70 @@ use Illuminate\Validation\ValidationException;
 
 class ReportExportController extends Controller
 {
+    public function __construct(private ReportExportProcessor $exportProcessor)
+    {
+    }
+
+    public function downloadNow(string $slug, Request $request)
+    {
+        if (!ReportExportProcessor::isValidSlug($slug)) {
+            return Failed('Unknown report slug.', 422);
+        }
+
+        if (ReportExportProcessor::slugRequiresAccountingPermission($slug)) {
+            $user = auth()->user();
+            if (!$user || !$user->can('view accounting reports')) {
+                return Failed('You do not have permission to export this report.', 403);
+            }
+        }
+
+        $validated = $request->validate([
+            'format' => 'required|in:excel,pdf',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'compare_start_date' => 'nullable|date',
+            'compare_end_date' => 'nullable|date|after_or_equal:compare_start_date',
+        ]);
+
+        $startDate = $validated['start_date'] ?? null;
+        $endDate = $validated['end_date'] ?? null;
+
+        if ($slug !== 'room-board' && (!$startDate || !$endDate)) {
+            throw ValidationException::withMessages([
+                'start_date' => ['Start date and end date are required.'],
+            ]);
+        }
+
+        if ($slug === 'room-board' && !$endDate) {
+            throw ValidationException::withMessages([
+                'end_date' => ['Snapshot date is required for room board report.'],
+            ]);
+        }
+
+        $format = $validated['format'] === 'pdf'
+            ? ReportExport::FORMAT_PDF
+            : ReportExport::FORMAT_EXCEL;
+
+        $params = array_filter([
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'compare_start_date' => $validated['compare_start_date'] ?? null,
+            'compare_end_date' => $validated['compare_end_date'] ?? null,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        try {
+            $file = $this->exportProcessor->buildDownload($slug, $format, $params);
+        } catch (\Throwable $e) {
+            return Failed($e->getMessage());
+        }
+
+        return response($file['content'], 200, [
+            'Content-Type' => $file['mime'],
+            'Content-Disposition' => 'attachment; filename="' . $file['filename'] . '"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
     public function requestEmail(string $slug, Request $request)
     {
         if (!ReportExportProcessor::isValidSlug($slug)) {
@@ -114,12 +178,12 @@ class ReportExportController extends Controller
     public function download(ReportExport $export, Request $request)
     {
         $token = (string) $request->query('token', '');
+        if ($token === '' || !hash_equals($export->download_token, $token)) {
+            return Failed('Invalid download link.', 403);
+        }
+
         $user = auth('api')->user();
-
-        $tokenOk = $token !== '' && hash_equals($export->download_token, $token);
-        $ownerOk = $user && (int) $export->user_id === (int) $user->id;
-
-        if (!$tokenOk && !$ownerOk) {
+        if ($user && (int) $export->user_id !== (int) $user->id) {
             return Failed('Invalid download link.', 403);
         }
 

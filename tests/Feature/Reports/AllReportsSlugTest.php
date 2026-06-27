@@ -2,38 +2,14 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Services\Reports\ReportCatalog;
 use Tests\TestCase;
 
 class AllReportsSlugTest extends TestCase
 {
     public static function reportSlugProvider(): array
     {
-        return [
-            ['overview'],
-            ['room-board'],
-            ['accrual-revenue'],
-            ['cash-box'],
-            ['chart-of-accounts'],
-            ['journal-entries'],
-            ['arrivals-departures'],
-            ['reservations-list'],
-            ['occupancy'],
-            ['revenue-summary'],
-            ['accrual-cash-reconciliation'],
-            ['ar-aging'],
-            ['adjustments'],
-            ['tax'],
-            ['revpar'],
-            ['by-dimension'],
-            ['peak-analysis'],
-            ['payments-refunds'],
-            ['closing-package'],
-            ['general-ledger'],
-            ['trial-balance'],
-            ['balance-sheet'],
-            ['cash-flow'],
-            ['financial-audit-log'],
-        ];
+        return array_map(fn (string $slug) => [$slug], ReportCatalog::allSlugs());
     }
 
     /** @dataProvider reportSlugProvider */

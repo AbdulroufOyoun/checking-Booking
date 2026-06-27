@@ -41,6 +41,7 @@ class SystemHealthController extends Controller
 
             return \SuccessData('System health', [
                 'healthy' => $failed === 0,
+                'mail_configured' => $this->isMailConfigured(),
                 'checks' => $checks,
                 'timestamp' => now()->toIso8601String(),
             ]);
@@ -58,5 +59,17 @@ class SystemHealthController extends Controller
         } catch (\Throwable $e) {
             return ['name' => $name, 'status' => 'fail', 'message' => $e->getMessage()];
         }
+    }
+
+    private function isMailConfigured(): bool
+    {
+        $default = (string) config('mail.default', '');
+        if (in_array($default, ['log', 'array'], true)) {
+            return false;
+        }
+
+        $host = config('mail.mailers.' . $default . '.host');
+
+        return is_string($host) && $host !== '';
     }
 }

@@ -21,13 +21,13 @@ class AccountingController extends Controller
     ) {
     }
 
-    public function chartOfAccounts()
+    public function chartOfAccounts(Request $request)
     {
+        $start = Carbon::parse($request->input('start_date', now()->startOfMonth()));
+        $end = Carbon::parse($request->input('end_date', now()->endOfMonth()));
+
         $accounts = ChartOfAccount::where('active', 1)->orderBy('code')->get();
-        $balanceRows = $this->financialStatementService->accountBalances(
-            Carbon::now()->startOfYear(),
-            Carbon::now()->endOfDay()
-        );
+        $balanceRows = $this->financialStatementService->accountBalances($start, $end);
         $balanceMap = $balanceRows->keyBy('account_id');
 
         $accounts = $accounts->map(function ($account) use ($balanceMap) {

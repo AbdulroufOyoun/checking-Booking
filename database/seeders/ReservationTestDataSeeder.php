@@ -8,6 +8,7 @@ use App\Models\PeakMonth;
 use App\Models\Pricingplan;
 use App\Models\Reservation;
 use App\Models\ReservationPay;
+use App\Support\ReservationCashQuery;
 use App\Models\ReservationRoom;
 use App\Models\Reservation_source;
 use App\Models\ReservationDailyCharge;
@@ -19,6 +20,7 @@ use App\Models\Stay_reason;
 use App\Models\User;
 use App\Services\PricingEngine;
 use App\Services\RevenueAccrualService;
+use App\Support\ReservationRelatedCleanup;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -32,7 +34,33 @@ use Illuminate\Support\Facades\Schema;
  */
 class ReservationTestDataSeeder extends Seeder
 {
-    private const TEST_YEAR = 2026;
+    /** When true, purge step is skipped (e.g. already done by demo:reset-reservations). */
+    protected bool $skipClearOnRun = false;
+
+    private function demoYear(): int
+    {
+        return (int) env('RESERVATION_DEMO_YEAR', Carbon::today()->format('Y'));
+    }
+
+    protected function scenarios(): array
+    {
+        $y = $this->demoYear();
+
+        return [
+            ['start' => "{$y}-03-28", 'end' => "{$y}-04-03", 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-04-05", 'end' => "{$y}-04-12", 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-04-15", 'end' => "{$y}-04-22", 'rent_type' => 0, 'discount' => 50, 'pay' => 'partial', 'status' => 2],
+            ['start' => "{$y}-04-20", 'end' => "{$y}-05-05", 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-05-10", 'end' => "{$y}-05-17", 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-06-01", 'end' => "{$y}-06-08", 'rent_type' => 0, 'discount' => 100, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-06-12", 'end' => "{$y}-06-20", 'rent_type' => 0, 'discount' => 0, 'pay' => 'partial', 'status' => 2],
+            ['start' => "{$y}-06-19", 'end' => "{$y}-07-04", 'rent_type' => 0, 'discount' => 50, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-07-10", 'end' => "{$y}-07-17", 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-07-26", 'end' => "{$y}-08-09", 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-08-01", 'end' => "{$y}-08-15", 'rent_type' => 0, 'discount' => 200, 'pay' => 'full', 'status' => 1],
+            ['start' => "{$y}-08-20", 'end' => "{$y}-09-03", 'rent_type' => 0, 'discount' => 0, 'pay' => 'none', 'status' => 2],
+        ];
+    }
 
     public function run(): void
     {
@@ -50,28 +78,25 @@ class ReservationTestDataSeeder extends Seeder
         $this->ensurePeakMonthsForPricingTests();
         $rooms = $this->ensureRooms($roomType);
 
+        if ($rooms->isEmpty() || $clients->isEmpty()) {
+            $this->command?->warn('ReservationTestDataSeeder: no rooms or clients — skipping scenarios.');
+
+            return;
+        }
+
         $this->enableFridayPeak();
 
         $shouldClear = app()->environment('testing')
             || (bool) env('SEED_RESERVATIONS_FRESH', false)
             || (bool) env('DEMO_SEED', false)
             || ($this->command && !$this->command->option('no-interaction')
-                && $this->command->confirm('Remove existing test reservations (' . self::TEST_YEAR . ')?', true));
+                && $this->command->confirm('Remove existing test reservations (' . $this->demoYear() . ')?', true));
 
-        if ($shouldClear) {
+        if ($shouldClear && !$this->skipClearOnRun) {
             $this->clearTestReservations();
         }
 
-        $scenarios = [
-            ['start' => '2026-05-10', 'end' => '2026-05-17', 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
-            ['start' => '2026-06-01', 'end' => '2026-06-08', 'rent_type' => 0, 'discount' => 100, 'pay' => 'full', 'status' => 1],
-            ['start' => '2026-06-12', 'end' => '2026-06-19', 'rent_type' => 0, 'discount' => 0, 'pay' => 'partial', 'status' => 2],
-            ['start' => '2026-06-20', 'end' => '2026-07-04', 'rent_type' => 0, 'discount' => 50, 'pay' => 'full', 'status' => 1],
-            ['start' => '2026-07-10', 'end' => '2026-07-17', 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
-            ['start' => '2026-07-26', 'end' => '2026-08-09', 'rent_type' => 0, 'discount' => 0, 'pay' => 'full', 'status' => 1],
-            ['start' => '2026-08-01', 'end' => '2026-08-15', 'rent_type' => 0, 'discount' => 200, 'pay' => 'full', 'status' => 1],
-            ['start' => '2026-08-20', 'end' => '2026-09-03', 'rent_type' => 0, 'discount' => 0, 'pay' => 'none', 'status' => 2],
-        ];
+        $scenarios = $this->scenarios();
 
         $created = 0;
         $skipped = 0;
@@ -113,30 +138,33 @@ class ReservationTestDataSeeder extends Seeder
         });
 
         $this->command?->info("Done: {$created} reservation(s) created, {$skipped} skipped.");
+        $year = $this->demoYear();
         $this->command?->table(
             ['Test report periods', 'Suggestion'],
             [
-                ['May 2026', 'Financials → Reports → 2026-05-01 to 2026-05-31'],
-                ['June 2026', '2026-06-01 to 2026-06-30'],
-                ['August 2026 (partial stays)', '2026-08-01 to 2026-08-31 — cross-month bookings'],
+                ["April {$year}", "Arrivals & departures → {$year}-04-01 to {$year}-08-31"],
+                ["May {$year}", "Financials → Reports → {$year}-05-01 to {$year}-05-31"],
+                ["June–July {$year}", "Accrual revenue → {$year}-06-01 to {$year}-07-31"],
+                ["August {$year} (partial stays)", "{$year}-08-01 to {$year}-08-31 — cross-month bookings"],
             ]
         );
     }
 
     private function clearTestReservations(): void
     {
-        $ids = Reservation::whereYear('start_date', self::TEST_YEAR)->pluck('id');
+        $ids = Reservation::whereYear('start_date', $this->demoYear())->pluck('id');
 
         if ($ids->isEmpty()) {
             return;
         }
 
+        $accountingRows = ReservationRelatedCleanup::purgeAccounting($ids);
         ReservationDailyCharge::whereIn('reservation_id', $ids)->delete();
         ReservationPay::whereIn('reservation_id', $ids)->delete();
         ReservationRoom::whereIn('reservation_id', $ids)->delete();
         Reservation::whereIn('id', $ids)->delete();
 
-        $this->command?->info('Removed ' . $ids->count() . ' test reservation(s) from ' . self::TEST_YEAR . '.');
+        $this->command?->info('Removed ' . $ids->count() . ' test reservation(s) from ' . $this->demoYear() . " ({$accountingRows} accounting row(s) purged).");
     }
 
     private function createTestReservation(
@@ -219,13 +247,14 @@ class ReservationTestDataSeeder extends Seeder
         $this->createRoomPriceSnapshot($room, $resRoom->id, $startDate, $endDate, $rentType);
 
         if ($payAmount > 0) {
+            $paidAt = ReservationCashQuery::capPaymentTimestampToToday($startDate->copy()->subDays(2));
             ReservationPay::create([
                 'reservation_id' => $reservation->id,
                 'pay'            => $payAmount,
                 'type'           => ReservationPay::TYPE_PAYMENT,
                 'user_id'        => $userId,
-                'created_at'     => $startDate->copy()->subDays(2),
-                'updated_at'     => $startDate->copy()->subDays(2),
+                'created_at'     => $paidAt,
+                'updated_at'     => $paidAt,
             ]);
         }
     }
@@ -354,12 +383,13 @@ class ReservationTestDataSeeder extends Seeder
 
     private function ensurePricingPlan(RoomType $roomType): void
     {
+        $y = $this->demoYear();
         $plan = Pricingplan::firstOrCreate(
             ['NameEn' => 'Summer Test Plan'],
             [
                 'NameAr'     => 'خطة صيف تجريبية',
-                'StartDate'  => '2026-07-01',
-                'EndDate'    => '2026-08-31',
+                'StartDate'  => "{$y}-07-01",
+                'EndDate'    => "{$y}-08-31",
                 'ActiveType' => 1,
             ]
         );

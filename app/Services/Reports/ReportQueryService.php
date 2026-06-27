@@ -12,6 +12,7 @@ use App\Models\Room;
 use App\Services\Accounting\FinancialAuditService;
 use App\Services\Accounting\FinancialStatementService;
 use App\Services\RevenueAccrualService;
+use App\Services\OccupancyReportCache;
 use App\Services\RoomOccupancyService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -111,6 +112,21 @@ class ReportQueryService
         return $lines;
     }
 
+    /**
+     * @return array<int, string>
+     */
+    private function reservationDateSpanMeta(): array
+    {
+        $min = Reservation::excludingCancelled()->min('start_date');
+        $max = Reservation::excludingCancelled()->max('expire_date');
+
+        if (!$min || !$max) {
+            return ['No reservations in the database. Run: php artisan db:seed --class=ReservationTestDataSeeder'];
+        }
+
+        return ["Reservation stays in database: {$min} → {$max}. Match the report year to these dates (demo year is usually the current calendar year)."];
+    }
+
     private function overview(Carbon $start, Carbon $end, ?Carbon $compareStart, ?Carbon $compareEnd): array
     {
         $accrual = $this->revenueAccrualService->calculate('total', null, $start, $end, false);
@@ -157,7 +173,13 @@ class ReportQueryService
             $summary,
             array_merge(
                 $this->periodMeta($start, $end, $compareStart, $compareEnd),
-                ['Financial overview for the selected period.']
+                ['Financial overview for the selected period.'],
+                $end->copy()->startOfDay()->gt(Carbon::today()->startOfDay())
+                    ? [
+                        'Accrual revenue counts only stay nights through today (earned revenue). Future nights in the selected period are excluded.',
+                        'Cash in/out includes only payments and refunds recorded through today within the selected period.',
+                    ]
+                    : []
             )
         );
     }
@@ -215,29 +237,38 @@ class ReportQueryService
     private function accrualRevenue(Carbon $start, Carbon $end, ?Carbon $compareStart, ?Carbon $compareEnd): array
     {
         $accrual = $this->revenueAccrualService->calculate('total', null, $start, $end, true);
-        $details = collect($accrual['details'] ?? []);
+        $detailsByDate = collect($accrual['details'] ?? [])->groupBy('charge_date');
+        $activeStats = $this->activeBookingsStatsByDate($start, $end);
 
-        $rows = $details->map(function ($line) {
-            return [
-                'charge_date' => $line['charge_date'] ?? '—',
-                'reservation_id' => $line['reservation_id'] ?? '—',
-                'room_number' => $line['room_number'] ?? '—',
-                'base_amount' => round((float) ($line['base_amount'] ?? 0), 2),
-                'discount' => round((float) ($line['discount_allocated'] ?? 0), 2),
-                'extras' => round((float) ($line['extras_allocated'] ?? 0), 2),
-                'penalties' => round((float) ($line['penalties_allocated'] ?? 0), 2),
-                'subtotal' => round((float) ($line['subtotal'] ?? 0), 2),
-                'tax' => round((float) ($line['tax'] ?? 0), 2),
-                'revenue' => round((float) ($line['revenue'] ?? 0), 2),
-                'price_source' => $line['price_source'] ?? '—',
+        $rows = [];
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $dateStr = $day->toDateString();
+            $items = $detailsByDate->get($dateStr, collect());
+
+            $rows[] = [
+                'charge_date' => $dateStr,
+                'active_bookings' => (int) ($activeStats['counts'][$dateStr] ?? 0),
+                'guest' => $activeStats['guests'][$dateStr] ?? '—',
+                'room_nights' => $items->count(),
+                'base_amount' => round($items->sum('base_amount'), 2),
+                'discount' => round($items->sum('discount_allocated'), 2),
+                'extras' => round($items->sum('extras_allocated'), 2),
+                'penalties' => round($items->sum('penalties_allocated'), 2),
+                'subtotal' => round($items->sum('subtotal'), 2),
+                'tax' => round($items->sum('tax'), 2),
+                'revenue' => round($items->sum('revenue'), 2),
             ];
-        })->values()->all();
+        }
+
+        $earnedNightTotal = (int) ($accrual['current']['count'] ?? 0);
+        $activeBookingsTotal = (int) collect($rows)->sum('active_bookings');
 
         $summary = [
             ['label' => 'Total revenue', 'value' => round((float) ($accrual['current']['total'] ?? 0), 2)],
             ['label' => 'Total tax', 'value' => round((float) ($accrual['current']['tax'] ?? 0), 2)],
-            ['label' => 'Room nights', 'value' => (int) ($accrual['current']['count'] ?? 0)],
-            ['label' => 'Detail lines', 'value' => count($rows)],
+            ['label' => 'Active bookings (total)', 'value' => $activeBookingsTotal],
+            ['label' => 'Room nights', 'value' => $earnedNightTotal],
+            ['label' => 'Days in period', 'value' => count($rows)],
         ];
 
         if ($compareStart && $compareEnd) {
@@ -245,11 +276,25 @@ class ReportQueryService
             $summary[] = ['label' => 'Compare revenue', 'value' => round((float) ($compare['current']['total'] ?? 0), 2)];
         }
 
+        $meta = array_merge(
+            $this->periodMeta($start, $end, $compareStart, $compareEnd),
+            [
+                'One row per calendar day in the period. Guest lists every non-cancelled stay overlapping that day.',
+                'Accrual revenue counts only confirmed (or fully paid) stays through today (earned revenue). Future nights in the selected period are excluded.',
+                'Only confirmed reservations (status 1), or pending stays paid in full, contribute to revenue columns.',
+                'Pending partial-payment stays appear in active bookings and guest names but not in revenue until confirmed or fully paid.',
+            ]
+        );
+        if ($earnedNightTotal === 0) {
+            $meta = array_merge($meta, $this->reservationDateSpanMeta());
+        }
+
         return $this->format(
             [
                 ['key' => 'charge_date', 'label' => 'Date'],
-                ['key' => 'reservation_id', 'label' => 'Reservation #'],
-                ['key' => 'room_number', 'label' => 'Room'],
+                ['key' => 'active_bookings', 'label' => 'Active bookings'],
+                ['key' => 'guest', 'label' => 'Guest'],
+                ['key' => 'room_nights', 'label' => 'Room nights'],
                 ['key' => 'base_amount', 'label' => 'Base'],
                 ['key' => 'discount', 'label' => 'Discount'],
                 ['key' => 'extras', 'label' => 'Extras'],
@@ -257,14 +302,10 @@ class ReportQueryService
                 ['key' => 'subtotal', 'label' => 'Subtotal'],
                 ['key' => 'tax', 'label' => 'Tax'],
                 ['key' => 'revenue', 'label' => 'Revenue'],
-                ['key' => 'price_source', 'label' => 'Price source'],
             ],
             $rows,
             $summary,
-            array_merge(
-                $this->periodMeta($start, $end, $compareStart, $compareEnd),
-                ['Detailed accrual revenue from reservation_daily_charges.']
-            )
+            $meta
         );
     }
 
@@ -446,6 +487,7 @@ class ReportQueryService
                 ['label' => 'Departures', 'value' => $departures->count()],
                 ['label' => 'Stayovers', 'value' => $stayovers->count()],
                 ['label' => 'Reservations', 'value' => collect($rows)->pluck('reservation_id')->unique()->count()],
+                ['label' => 'Total movements', 'value' => count($rows)],
             ],
             array_merge(
                 $this->periodMeta($start, $end),
@@ -455,7 +497,7 @@ class ReportQueryService
     }
 
     /**
-     * Date range: one row per reservation overlapping the period (matches reservations table).
+     * Date range: separate movement rows for each arrival, departure, or in-house overlap in the period.
      */
     private function arrivalsDeparturesDateRange(callable $baseQuery, string $startStr, string $endStr, Carbon $start, Carbon $end): array
     {
@@ -468,6 +510,7 @@ class ReportQueryService
 
         $arrivalCount = 0;
         $departureCount = 0;
+        $inHouseCount = 0;
         $rows = [];
 
         foreach ($reservations as $reservation) {
@@ -476,28 +519,26 @@ class ReportQueryService
 
             if ($hasArrival) {
                 $arrivalCount++;
+                $rows[] = $this->movementRow($reservation, 'Arrival', $reservation->start_date);
             }
             if ($hasDeparture) {
                 $departureCount++;
+                $rows[] = $this->movementRow($reservation, 'Departure', $reservation->expire_date);
             }
-
-            $types = [];
-            if ($hasArrival) {
-                $types[] = 'Arrival';
+            if (!$hasArrival && !$hasDeparture) {
+                $inHouseCount++;
+                $rows[] = $this->movementRow($reservation, 'In-house', $startStr);
             }
-            if ($hasDeparture) {
-                $types[] = 'Departure';
-            }
-            if ($types === []) {
-                $types[] = 'In-house';
-            }
-
-            $movementDate = $hasArrival
-                ? $reservation->start_date
-                : ($hasDeparture ? $reservation->expire_date : $startStr);
-
-            $rows[] = $this->movementRow($reservation, implode(' & ', $types), $movementDate);
         }
+
+        usort($rows, function ($a, $b) {
+            $byDate = strcmp((string) $a['movement_date'], (string) $b['movement_date']);
+            if ($byDate !== 0) {
+                return $byDate;
+            }
+
+            return strcmp((string) $a['movement_type'], (string) $b['movement_type']);
+        });
 
         return $this->format(
             [
@@ -515,10 +556,12 @@ class ReportQueryService
                 ['label' => 'Reservations', 'value' => $reservations->count()],
                 ['label' => 'Arrivals', 'value' => $arrivalCount],
                 ['label' => 'Departures', 'value' => $departureCount],
+                ['label' => 'In-house', 'value' => $inHouseCount],
+                ['label' => 'Total movements', 'value' => count($rows)],
             ],
             array_merge(
                 $this->periodMeta($start, $end),
-                ['One row per reservation in the period (same overlap rules as the reservations list).']
+                ['Date range: one row per arrival, departure, or in-house stay within the period (same reservations as the bookings list).']
             )
         );
     }
@@ -584,6 +627,21 @@ class ReportQueryService
 
     private function occupancy(Carbon $start, Carbon $end, ?Carbon $compareStart, ?Carbon $compareEnd): array
     {
+        return OccupancyReportCache::remember(
+            $start,
+            $end,
+            $compareStart,
+            $compareEnd,
+            fn () => $this->buildOccupancyReport($start, $end, $compareStart, $compareEnd)
+        );
+    }
+
+    private function buildOccupancyReport(
+        Carbon $start,
+        Carbon $end,
+        ?Carbon $compareStart,
+        ?Carbon $compareEnd
+    ): array {
         $availableRooms = Room::query()
             ->where('active', 1)
             ->whereNotIn('roomStatus', [3, 4])
@@ -591,18 +649,29 @@ class ReportQueryService
 
         $days = $start->diffInDays($end) + 1;
         $capacityNights = $availableRooms * $days;
+        $recognizedEnd = $this->recognizedAccrualEnd($end);
 
         $rows = [];
         $totalRoomNights = 0;
 
-        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
-            $roomNights = ReservationDailyCharge::query()
-                ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
-                ->where('reservations.reservation_status', 1)
-                ->whereDate('reservation_daily_charges.charge_date', $day->toDateString())
-                ->count();
+        $chargesByDate = ReservationDailyCharge::query()
+            ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1)
+            ->whereBetween('reservation_daily_charges.charge_date', [
+                $start->toDateString(),
+                $recognizedEnd->toDateString(),
+            ])
+            ->selectRaw('DATE(reservation_daily_charges.charge_date) as charge_day, COUNT(*) as room_nights')
+            ->groupBy('charge_day')
+            ->pluck('room_nights', 'charge_day');
 
-            $daySummary = $this->occupancyService->summaryForDate($day);
+        $dailyCounts = $this->occupancyService->dailyInHouseVacantForRange($start, $end);
+
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $dateStr = $day->toDateString();
+            $roomNights = (int) ($chargesByDate[$dateStr] ?? 0);
+            $daySummary = $dailyCounts[$dateStr] ?? ['in_house' => 0, 'vacant' => 0];
+
             $occupancyRate = $availableRooms > 0
                 ? round($roomNights / $availableRooms * 100, 1)
                 : 0.0;
@@ -610,7 +679,7 @@ class ReportQueryService
             $totalRoomNights += $roomNights;
 
             $rows[] = [
-                'date' => $day->toDateString(),
+                'date' => $dateStr,
                 'room_nights' => $roomNights,
                 'available_rooms' => $availableRooms,
                 'occupancy_rate' => $occupancyRate,
@@ -631,12 +700,13 @@ class ReportQueryService
         ];
 
         if ($compareStart && $compareEnd) {
+            $compareRecognizedEnd = $this->recognizedAccrualEnd($compareEnd);
             $compareNights = ReservationDailyCharge::query()
                 ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
                 ->where('reservations.reservation_status', 1)
                 ->whereBetween('reservation_daily_charges.charge_date', [
                     $compareStart->toDateString(),
-                    $compareEnd->toDateString(),
+                    $compareRecognizedEnd->toDateString(),
                 ])
                 ->count();
 
@@ -668,30 +738,76 @@ class ReportQueryService
     private function revenueSummary(Carbon $start, Carbon $end, ?Carbon $compareStart, ?Carbon $compareEnd): array
     {
         $accrual = $this->revenueAccrualService->calculate('total', null, $start, $end, true);
-        $byDate = collect($accrual['details'] ?? [])
-            ->groupBy('charge_date')
-            ->map(function (Collection $items, string $date) {
-                return [
-                    'charge_date' => $date,
-                    'base_amount' => round($items->sum('base_amount'), 2),
-                    'discount' => round($items->sum('discount_allocated'), 2),
-                    'extras' => round($items->sum('extras_allocated'), 2),
-                    'penalties' => round($items->sum('penalties_allocated'), 2),
-                    'subtotal' => round($items->sum('subtotal'), 2),
-                    'tax' => round($items->sum('tax'), 2),
-                    'revenue' => round($items->sum('revenue'), 2),
-                    'room_nights' => $items->count(),
-                ];
-            })
-            ->sortKeys()
-            ->values()
-            ->all();
+        $detailsByDate = collect($accrual['details'] ?? [])->groupBy('charge_date');
+
+        $recognizedEnd = $this->recognizedAccrualEnd($end);
+
+        $bookedStats = ReservationDailyCharge::query()
+            ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1)
+            ->whereBetween('reservation_daily_charges.charge_date', [
+                $start->toDateString(),
+                $end->toDateString(),
+            ])
+            ->selectRaw('DATE(reservation_daily_charges.charge_date) as charge_day')
+            ->selectRaw('COUNT(*) as room_nights')
+            ->selectRaw('COUNT(DISTINCT reservation_daily_charges.reservation_id) as reservations')
+            ->groupBy('charge_day')
+            ->get()
+            ->keyBy('charge_day');
+
+        $earnedStats = ReservationDailyCharge::query()
+            ->join('reservations', 'reservation_daily_charges.reservation_id', '=', 'reservations.id')
+            ->where('reservations.reservation_status', 1)
+            ->whereBetween('reservation_daily_charges.charge_date', [
+                $start->toDateString(),
+                $recognizedEnd->toDateString(),
+            ])
+            ->selectRaw('DATE(reservation_daily_charges.charge_date) as charge_day')
+            ->selectRaw('COUNT(*) as earned_room_nights')
+            ->groupBy('charge_day')
+            ->get()
+            ->keyBy('charge_day');
+
+        $dailyCounts = $this->occupancyService->dailyInHouseVacantForRange($start, $end);
+        $activeBookingsByDate = $this->activeBookingsCountByDate($start, $end);
+
+        $rows = [];
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $dateStr = $day->toDateString();
+            $items = $detailsByDate->get($dateStr, collect());
+            $booked = $bookedStats->get($dateStr);
+            $earned = $earnedStats->get($dateStr);
+
+            $activeBookings = (int) ($activeBookingsByDate[$dateStr] ?? 0);
+
+            $rows[] = [
+                'charge_date' => $dateStr,
+                'active_bookings' => $activeBookings,
+                'in_house' => (int) ($dailyCounts[$dateStr]['in_house'] ?? 0),
+                'base_amount' => round($items->sum('base_amount'), 2),
+                'discount' => round($items->sum('discount_allocated'), 2),
+                'extras' => round($items->sum('extras_allocated'), 2),
+                'penalties' => round($items->sum('penalties_allocated'), 2),
+                'subtotal' => round($items->sum('subtotal'), 2),
+                'tax' => round($items->sum('tax'), 2),
+                'revenue' => round($items->sum('revenue'), 2),
+                'earned_room_nights' => (int) ($earned->earned_room_nights ?? 0),
+                'room_nights' => (int) ($booked->room_nights ?? 0),
+            ];
+        }
+
+        $bookedNightTotal = (int) collect($rows)->sum('room_nights');
+        $earnedNightTotal = (int) ($accrual['current']['count'] ?? 0);
+        $activeBookingsTotal = (int) collect($rows)->sum('active_bookings');
 
         $summary = [
             ['label' => 'Total base', 'value' => $accrual['current']['total_base'] ?? 0],
             ['label' => 'Total tax', 'value' => $accrual['current']['tax'] ?? 0],
             ['label' => 'Total revenue', 'value' => $accrual['current']['total'] ?? 0],
-            ['label' => 'Room nights', 'value' => $accrual['current']['count'] ?? 0],
+            ['label' => 'Active bookings (total)', 'value' => $activeBookingsTotal],
+            ['label' => 'Room nights (booked)', 'value' => $bookedNightTotal],
+            ['label' => 'Room nights (earned)', 'value' => $earnedNightTotal],
         ];
 
         if ($compareStart && $compareEnd) {
@@ -702,7 +818,8 @@ class ReportQueryService
         return $this->format(
             [
                 ['key' => 'charge_date', 'label' => 'Date'],
-                ['key' => 'room_nights', 'label' => 'Room nights'],
+                ['key' => 'active_bookings', 'label' => 'Active bookings'],
+                ['key' => 'in_house', 'label' => 'In house'],
                 ['key' => 'base_amount', 'label' => 'Base'],
                 ['key' => 'discount', 'label' => 'Discount'],
                 ['key' => 'extras', 'label' => 'Extras'],
@@ -710,14 +827,85 @@ class ReportQueryService
                 ['key' => 'subtotal', 'label' => 'Subtotal'],
                 ['key' => 'tax', 'label' => 'Tax'],
                 ['key' => 'revenue', 'label' => 'Revenue'],
+                ['key' => 'earned_room_nights', 'label' => 'Room nights (earned)'],
+                ['key' => 'room_nights', 'label' => 'Room nights (booked)'],
             ],
-            $byDate,
+            $rows,
             $summary,
             array_merge(
                 $this->periodMeta($start, $end, $compareStart, $compareEnd),
-                ['Accrual revenue from daily charges (reservation_status = 1).']
+                [
+                    'Active bookings: count of non-cancelled reservations overlapping that day (same rule as the reservations list/calendar when filtering by date).',
+                    'Room nights (booked): confirmed stays (status 1) with a nightly charge on that date — includes future dates in the selected period.',
+                    'Room nights (earned) and revenue: only nights through today (accrual). Future nights in an active stay show booked nights but revenue 0 until the night occurs.',
+                ]
             )
         );
+    }
+
+    /**
+     * @return array{counts: array<string, int>, guests: array<string, string>}
+     */
+    private function activeBookingsStatsByDate(Carbon $start, Carbon $end): array
+    {
+        $counts = [];
+        $guestSets = [];
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $dateStr = $day->toDateString();
+            $counts[$dateStr] = 0;
+            $guestSets[$dateStr] = [];
+        }
+
+        $reservations = Reservation::excludingCancelled()
+            ->where('start_date', '<=', $end->toDateString())
+            ->where('expire_date', '>=', $start->toDateString())
+            ->with('client')
+            ->get(['id', 'start_date', 'expire_date', 'client_id']);
+
+        foreach ($reservations as $reservation) {
+            $guest = $reservation->guestDisplayName();
+            $stayStart = Carbon::parse($reservation->start_date)->startOfDay();
+            $stayEnd = Carbon::parse($reservation->expire_date)->startOfDay();
+            $from = $stayStart->gt($start) ? $stayStart : $start->copy()->startOfDay();
+            $until = $stayEnd->lt($end) ? $stayEnd : $end->copy()->startOfDay();
+
+            for ($day = $from->copy(); $day->lte($until); $day->addDay()) {
+                $dateStr = $day->toDateString();
+                $counts[$dateStr]++;
+                if ($guest !== '—') {
+                    $guestSets[$dateStr][$guest] = true;
+                }
+            }
+        }
+
+        $guests = [];
+        foreach ($guestSets as $dateStr => $set) {
+            $names = array_keys($set);
+            sort($names);
+            $guests[$dateStr] = $names !== [] ? implode(', ', $names) : '—';
+        }
+
+        return ['counts' => $counts, 'guests' => $guests];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function activeBookingsCountByDate(Carbon $start, Carbon $end): array
+    {
+        return $this->activeBookingsStatsByDate($start, $end)['counts'];
+    }
+
+    private function recognizedAccrualEnd(Carbon $end): Carbon
+    {
+        $recognizedEnd = $end->copy()->startOfDay();
+        $today = Carbon::today()->startOfDay();
+
+        if ($recognizedEnd->gt($today)) {
+            return $today;
+        }
+
+        return $recognizedEnd;
     }
 
     private function accrualCashReconciliation(Carbon $start, Carbon $end, ?Carbon $compareStart, ?Carbon $compareEnd): array
@@ -1116,13 +1304,40 @@ class ReportQueryService
 
     private function paymentsRefunds(Carbon $start, Carbon $end): array
     {
+        $bounds = \App\Support\ReservationCashQuery::cashPeriodBounds($start, $end);
+        if ($bounds === null) {
+            return $this->format(
+                [
+                    ['key' => 'created_at', 'label' => 'Date/time'],
+                    ['key' => 'type', 'label' => 'Type'],
+                    ['key' => 'amount', 'label' => 'Amount'],
+                    ['key' => 'reservation_id', 'label' => 'Reservation #'],
+                    ['key' => 'guest', 'label' => 'Guest'],
+                    ['key' => 'reservation_status', 'label' => 'Reservation status'],
+                ],
+                [],
+                [
+                    ['label' => 'Transactions', 'value' => 0],
+                    ['label' => 'Cash in', 'value' => 0],
+                    ['label' => 'Cash out (refunds)', 'value' => 0],
+                    ['label' => 'Net', 'value' => 0],
+                ],
+                array_merge(
+                    $this->periodMeta($start, $end),
+                    [
+                        'Cash in/out includes only payments and refunds recorded through today within the selected period.',
+                        'Filtered by reservation_pay.created_at; includes confirmed and pending reservations.',
+                    ]
+                )
+            );
+        }
+
+        [$periodStart, $periodEnd] = $bounds;
+
         $payments = ReservationPay::with(['reservation.client', 'user'])
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
-            ->whereIn('reservations.reservation_status', \App\Support\ReservationCashQuery::cashMovementStatuses())
-            ->whereBetween('reservation_pay.created_at', [
-                $start->copy()->startOfDay(),
-                $end->copy()->endOfDay(),
-            ])
+            ->whereIn('reservations.reservation_status', Reservation::cashReportStatuses())
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->select('reservation_pay.*')
             ->orderByDesc('reservation_pay.created_at')
             ->get();
@@ -1164,7 +1379,10 @@ class ReportQueryService
             ],
             array_merge(
                 $this->periodMeta($start, $end),
-                ['Filtered by reservation_pay.created_at; includes confirmed and pending reservations.']
+                [
+                    'Cash in/out includes only payments and refunds recorded through today within the selected period.',
+                    'Filtered by reservation_pay.created_at; includes confirmed and pending reservations.',
+                ]
             )
         );
     }
@@ -1351,23 +1569,24 @@ class ReportQueryService
      */
     private function cashForPeriod(Carbon $start, Carbon $end): array
     {
+        $bounds = \App\Support\ReservationCashQuery::cashPeriodBounds($start, $end);
+        if ($bounds === null) {
+            return ['total_in' => 0.0, 'total_out' => 0.0, 'net_earnings' => 0.0];
+        }
+
+        [$periodStart, $periodEnd] = $bounds;
+
         $totalIn = (float) ReservationPay::query()
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
             ->whereIn('reservations.reservation_status', Reservation::cashReportStatuses())
-            ->whereBetween('reservation_pay.created_at', [
-                $start->copy()->startOfDay(),
-                $end->copy()->endOfDay(),
-            ])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->where('reservation_pay.type', ReservationPay::TYPE_PAYMENT)
             ->sum('reservation_pay.pay');
 
         $totalOut = (float) ReservationPay::query()
             ->join('reservations', 'reservation_pay.reservation_id', '=', 'reservations.id')
             ->whereIn('reservations.reservation_status', Reservation::cashReportStatuses())
-            ->whereBetween('reservation_pay.created_at', [
-                $start->copy()->startOfDay(),
-                $end->copy()->endOfDay(),
-            ])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->where('reservation_pay.type', ReservationPay::TYPE_REFUND)
             ->sum('reservation_pay.pay');
 

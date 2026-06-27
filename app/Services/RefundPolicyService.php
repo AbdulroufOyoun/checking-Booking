@@ -100,10 +100,6 @@ class RefundPolicyService
         $context ??= $this->buildContext($reservation);
 
         $candidates = RefundPolicy::query()
-            ->where(function ($q) use ($context) {
-                $q->whereNull('payment_status')
-                    ->orWhere('payment_status', $context['payment_status']);
-            })
             ->where(function ($q) use ($reservation) {
                 $q->whereNull('rent_type')
                     ->orWhere('rent_type', (int) $reservation->rent_type);
@@ -111,6 +107,10 @@ class RefundPolicyService
             ->get();
 
         $matched = $candidates->filter(function (RefundPolicy $policy) use ($context) {
+            if (!$policy->matchesPaymentContext($context)) {
+                return false;
+            }
+
             $timing = $policy->timing ?? ((int) $policy->during_stay === 1 ? 'after_start' : 'before_start');
             $threshold = (int) ($policy->days_threshold ?? $policy->days_before_checkin ?? 0);
 

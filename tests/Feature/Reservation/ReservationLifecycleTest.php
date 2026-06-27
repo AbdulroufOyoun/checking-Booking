@@ -58,6 +58,19 @@ class ReservationLifecycleTest extends TestCase
         $this->assertNotNull($reservationRoom);
 
         $room = Room::findOrFail($reservationRoom->room_id);
+
+        $hasInHouseOnRoom = ReservationRoom::where('room_id', $room->id)
+            ->where('reservation_id', '!=', $reservation->id)
+            ->whereHas('reservation', function ($query) {
+                $query->where('reservation_status', Reservation::STATUS_CONFIRMED)
+                    ->where('logedin', Reservation::LOGEDIN_IN_HOUSE);
+            })
+            ->exists();
+
+        if ($hasInHouseOnRoom) {
+            $this->markTestSkipped('Room has another in-house stay — cannot test cancel release in isolation.');
+        }
+
         Room::where('id', $room->id)->update(['roomStatus' => ReservationRoomStatusService::ROOM_OCCUPIED]);
 
         $user = $this->userWithOnlyPermissions(['view reservations', 'cancel reservations', 'create reservations']);
@@ -222,13 +235,18 @@ class ReservationLifecycleTest extends TestCase
         foreach (Room::where('active', 1)->where('roomStatus', 1)->whereHas('roomType')->get() as $candidate) {
             $overlap = ReservationRoom::where('room_id', $candidate->id)
                 ->whereHas('reservation', function ($query) use ($start, $end) {
-                    $query->where('start_date', '<', $end)
+                    $query->whereNotIn('reservation_status', [Reservation::STATUS_CANCELLED])
+                        ->where('start_date', '<', $end)
                         ->where('expire_date', '>', $start);
                 })->exists();
             if (!$overlap) {
                 $room = $candidate;
                 break;
             }
+        }
+
+        if (!$room) {
+            $room = $this->findOrCreateAvailableRoom($start, $end);
         }
 
         if (!$room) {

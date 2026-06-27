@@ -9,6 +9,7 @@ use App\Http\Requests\Room\StoreMultiRoomRequest;
 use App\Http\Requests\Room\RoomIndexRequest;
 
 use App\Models\Room;
+use App\Services\OccupancyBoardCache;
 
 class RoomController extends Controller
 {
@@ -118,6 +119,8 @@ return Success('Rooms created successfully.', $addedRooms);
 
         try {
             $room->save();
+            OccupancyBoardCache::bump();
+
             return Success('Room updated Successfully');
         } catch (\Exception $e) {
             return Failed($e->getMessage());

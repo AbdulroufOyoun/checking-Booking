@@ -28,22 +28,20 @@ class ShowUpdateTest extends TestCase
         $client = Client::first();
         $stayReason = Stay_reason::first();
         $source = Reservation_source::first();
-        $room = Room::where('active', 1)->whereHas('roomType')->first();
+        $start = '2026-06-15';
+        $end = '2026-06-18';
+        $room = $this->findOrCreateAvailableRoom($start, $end);
 
         $this->assertNotNull($client);
         $this->assertNotNull($stayReason);
         $this->assertNotNull($source);
         $this->assertNotNull($room);
 
-        Room::where('id', $room->id)->update([
-            'roomStatus' => ReservationRoomStatusService::ROOM_AVAILABLE,
-        ]);
-
         $create = $this->actingAs($user, 'api')->postJson('/api/users/makeReservation', [
             'client_id' => $client->id,
             'rooms' => [['room_id' => $room->id]],
-            'start_date' => '2026-06-15',
-            'expire_date' => '2026-06-18',
+            'start_date' => $start,
+            'expire_date' => $end,
             'reservation_type' => 0,
             'reservation_status' => 1,
             'stay_reason_id' => $stayReason->id,
@@ -80,5 +78,18 @@ class ShowUpdateTest extends TestCase
         ]);
 
         Carbon::setTestNow();
+    }
+
+    public function test_show_missing_reservation_returns_404(): void
+    {
+        $user = $this->userWithApiPermissions(['view reservations']);
+
+        $missingId = (int) (Reservation::max('id') ?? 0) + 99999;
+
+        $response = $this->actingAs($user, 'api')->getJson("/api/users/reservations/{$missingId}");
+
+        $response->assertStatus(404);
+        $response->assertJsonPath('success', false);
+        $response->assertJsonPath('message', 'Reservation not found');
     }
 }

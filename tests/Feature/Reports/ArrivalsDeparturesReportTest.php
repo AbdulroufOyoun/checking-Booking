@@ -8,25 +8,73 @@ use Tests\TestCase;
 
 class ArrivalsDeparturesReportTest extends TestCase
 {
-    public function test_date_range_row_count_matches_reservations_table_overlap(): void
+    public function test_date_range_emits_separate_arrival_and_departure_rows(): void
     {
         $start = '2026-06-01';
         $end = '2026-06-30';
-
-        $tableCount = Reservation::excludingCancelled()
-            ->where('start_date', '<=', $end)
-            ->where('expire_date', '>=', $start)
-            ->count();
 
         $report = app(ReportQueryService::class)->run('arrivals-departures', [
             'start_date' => $start,
             'end_date' => $end,
         ]);
 
-        $this->assertCount($tableCount, $report['rows']);
+        $tableCount = Reservation::excludingCancelled()
+            ->where('start_date', '<=', $end)
+            ->where('expire_date', '>=', $start)
+            ->count();
 
         $summary = collect($report['summary'])->pluck('value', 'label');
         $this->assertSame($tableCount, $summary->get('Reservations'));
+
+        $types = collect($report['rows'])->pluck('movement_type');
+        $this->assertTrue($types->contains('Arrival'));
+        $this->assertTrue($types->contains('Departure'));
+        $this->assertGreaterThanOrEqual($tableCount, $report['rows']);
+        $this->assertSame(count($report['rows']), $summary->get('Total movements'));
+    }
+
+    public function test_april_only_range_lists_april_movements(): void
+    {
+        $report = app(ReportQueryService::class)->run('arrivals-departures', [
+            'start_date' => '2026-04-01',
+            'end_date' => '2026-04-30',
+        ]);
+
+        $aprilRows = collect($report['rows'])->filter(
+            fn (array $row) => str_starts_with((string) ($row['movement_date'] ?? ''), '2026-04')
+        );
+
+        $this->assertGreaterThanOrEqual(4, $aprilRows->count(), 'April month report should list April arrival/departure rows.');
+
+        $summary = collect($report['summary'])->pluck('value', 'label');
+        $this->assertGreaterThanOrEqual(4, (int) $summary->get('Reservations'));
+    }
+
+    public function test_april_arrivals_appear_in_april_to_august_range(): void
+    {
+        $aprilReservation = Reservation::excludingCancelled()
+            ->where('start_date', '>=', '2026-04-01')
+            ->where('start_date', '<=', '2026-04-30')
+            ->first();
+
+        if ($aprilReservation === null) {
+            $this->markTestSkipped('No April 2026 reservation in seed data.');
+        }
+
+        $report = app(ReportQueryService::class)->run('arrivals-departures', [
+            'start_date' => '2026-04-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $aprilArrivals = collect($report['rows'])->filter(function (array $row) {
+            return ($row['movement_type'] ?? '') === 'Arrival'
+                && str_starts_with((string) ($row['movement_date'] ?? ''), '2026-04');
+        });
+
+        $this->assertTrue(
+            $aprilArrivals->pluck('reservation_id')->contains($aprilReservation->id),
+            'April check-in should produce an Arrival movement row in the range report.'
+        );
     }
 
     public function test_single_day_includes_stayover_movements(): void

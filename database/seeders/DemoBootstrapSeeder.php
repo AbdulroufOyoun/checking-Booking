@@ -29,7 +29,7 @@ class DemoBootstrapSeeder extends Seeder
             $this->command?->line($output);
         }
 
-        $this->command?->info('Backfilling accounting journal entries...');
+        $this->command?->info('Backfilling accounting journal entries (payments + accrual)...');
         Artisan::call('accounting:backfill-journal');
         if ($output = trim(Artisan::output())) {
             $this->command?->line($output);

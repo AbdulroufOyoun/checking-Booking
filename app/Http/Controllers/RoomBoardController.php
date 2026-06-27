@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\OccupancyBoardCache;
 use App\Services\RoomOccupancyService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class RoomBoardController extends Controller
                 'search' => $request->input('search'),
             ], fn ($v) => $v !== null && $v !== '');
 
-            $board = $this->occupancyService->buildBoard($date, $filters);
+            $board = OccupancyBoardCache::remember($date, $filters, fn () => $this->occupancyService->buildBoard($date, $filters));
 
             return \SuccessData('Room occupancy board retrieved', $board);
         } catch (\Exception $e) {

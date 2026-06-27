@@ -4,11 +4,13 @@ namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Tests\Support\InteractsWithApi;
+use Tests\Support\InteractsWithReservationFixtures;
 
 abstract class TestCase extends BaseTestCase
 {
     use CreatesApplication;
     use InteractsWithApi;
+    use InteractsWithReservationFixtures;
 
     private static ?\App\Models\User $cachedPermissionUser = null;
 

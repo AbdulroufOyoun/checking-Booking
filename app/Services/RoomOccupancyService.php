@@ -18,7 +18,7 @@ class RoomOccupancyService
     {
         $dateStr = $date->toDateString();
 
-        $query = Room::with(['roomType', 'building', 'floor', 'suite'])
+        $query = Room::with(['roomType', 'building', 'floor', 'suite.floor'])
             ->where('active', 1);
 
         if (!empty($filters['building_id'])) {
@@ -69,11 +69,93 @@ class RoomOccupancyService
     }
 
     /**
-     * Summary counts only (for dashboard).
+     * Summary counts only (for dashboard) — lightweight, no room payloads.
      */
     public function summaryForDate(Carbon $date): array
     {
-        return $this->buildBoard($date)['summary'];
+        return $this->summaryCountsForDate($date);
+    }
+
+    /**
+     * Occupancy summary without building full board payloads (faster for reports/dashboard).
+     */
+    public function summaryCountsForDate(Carbon $date): array
+    {
+        $dateStr = $date->toDateString();
+
+        $rooms = Room::query()
+            ->where('active', 1)
+            ->get(['id', 'roomStatus', 'active']);
+
+        $reservationByRoom = $this->loadReservationsByRoom($rooms->pluck('id'), $dateStr);
+
+        $summary = $this->emptySummary();
+
+        foreach ($rooms as $room) {
+            $reservation = $reservationByRoom->get($room->id);
+            $occupancyStatus = $this->resolveOccupancyStatus($room, $reservation, $dateStr);
+
+            $summary['total']++;
+            $summary[$occupancyStatus] = ($summary[$occupancyStatus] ?? 0) + 1;
+        }
+
+        $summary['occupancy_rate'] = $summary['total'] > 0
+            ? round((($summary['in_house'] ?? 0) + ($summary['reserved'] ?? 0)) / $summary['total'] * 100, 1)
+            : 0;
+
+        return $summary;
+    }
+
+    /**
+     * Per-day in_house and vacant counts for a date range (single room/reservation load).
+     *
+     * @return array<string, array{in_house: int, vacant: int}>
+     */
+    public function dailyInHouseVacantForRange(Carbon $start, Carbon $end): array
+    {
+        $rooms = Room::query()
+            ->where('active', 1)
+            ->get(['id', 'roomStatus', 'active']);
+
+        if ($rooms->isEmpty()) {
+            return [];
+        }
+
+        $reservationRooms = $this->loadReservationRoomsForRange(
+            $rooms->pluck('id'),
+            $start,
+            $end
+        );
+
+        $byDate = [];
+
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $dateStr = $day->toDateString();
+            $inHouse = 0;
+            $vacant = 0;
+
+            foreach ($rooms as $room) {
+                $reservation = $this->pickReservationForRoomOnDate(
+                    $reservationRooms,
+                    (int) $room->id,
+                    $dateStr
+                );
+                $status = $this->resolveOccupancyStatus($room, $reservation, $dateStr);
+
+                if ($status === 'in_house' || $status === 'check_out_today') {
+                    $inHouse++;
+                } elseif ($status === 'vacant') {
+                    $vacant++;
+                }
+            }
+
+            $byDate[$dateStr] = [
+                'in_house' => $inHouse,
+                'vacant' => $vacant,
+            ];
+        }
+
+        return $byDate;
     }
 
     public function checkInsToday(Carbon $date): int
@@ -184,6 +266,80 @@ class RoomOccupancyService
         return $byRoom;
     }
 
+    private function loadReservationRoomsForRange(Collection $roomIds, Carbon $start, Carbon $end): Collection
+    {
+        if ($roomIds->isEmpty()) {
+            return collect();
+        }
+
+        $startStr = $start->toDateString();
+        $endStr = $end->toDateString();
+
+        return ReservationRoom::with([
+            'reservation.client',
+            'reservation.payments',
+        ])
+            ->whereIn('room_id', $roomIds)
+            ->whereHas('reservation', function ($q) use ($startStr, $endStr) {
+                $q->whereIn('reservation_status', [1, 2])
+                    ->where(function ($q2) use ($startStr, $endStr) {
+                        $q2->where(function ($q3) use ($startStr, $endStr) {
+                            $q3->where('start_date', '<=', $endStr)
+                                ->where('expire_date', '>=', $startStr);
+                        })
+                            ->orWhere(function ($q4) use ($startStr) {
+                                $q4->where('logedin', Reservation::LOGEDIN_IN_HOUSE)
+                                    ->where('start_date', '<=', $startStr);
+                            });
+                    });
+            })
+            ->get();
+    }
+
+    private function pickReservationForRoomOnDate(Collection $reservationRooms, int $roomId, string $dateStr): ?Reservation
+    {
+        $best = null;
+
+        foreach ($reservationRooms as $reservationRoom) {
+            if ((int) $reservationRoom->room_id !== $roomId) {
+                continue;
+            }
+
+            $reservation = $reservationRoom->reservation;
+            if (!$reservation) {
+                continue;
+            }
+
+            if (!$this->reservationTouchesDate($reservation, $dateStr)) {
+                continue;
+            }
+
+            if (!$best || $this->reservationPriority($reservation, $dateStr)
+                > $this->reservationPriority($best, $dateStr)) {
+                $best = $reservation;
+            }
+        }
+
+        return $best;
+    }
+
+    private function reservationTouchesDate(Reservation $reservation, string $dateStr): bool
+    {
+        $start = $reservation->start_date;
+        $expire = $reservation->expire_date;
+        $checkedIn = (int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE;
+
+        if ($start <= $dateStr && $expire >= $dateStr) {
+            return true;
+        }
+
+        if ($checkedIn && $start <= $dateStr && $expire < $dateStr) {
+            return true;
+        }
+
+        return false;
+    }
+
     private function reservationPriority(Reservation $reservation, string $dateStr): int
     {
         $status = $this->resolveOccupancyStatus(
@@ -275,8 +431,11 @@ class RoomOccupancyService
             'building_name' => $room->building?->name ?? null,
             'floor_id' => $room->floor_id,
             'floor_name' => $room->floor ? 'Floor ' . ($room->floor->number ?? $room->floor_id) : null,
+            'floor_number' => $room->floor?->number ?? (string) $room->floor_id,
             'suite_id' => $room->suite_id,
-            'suite_name' => $room->suite?->number ? 'Suite ' . $room->suite->number : null,
+            'suite_name' => $this->formatSuiteLabel($room->suite?->number),
+            'suite_floor_id' => $room->suite?->floor_id ?? $room->floor_id,
+            'suite_floor_number' => $room->suite?->floor?->number ?? $room->floor?->number,
             'reservation' => null,
         ];
 
@@ -324,6 +483,20 @@ class RoomOccupancyService
             4 => 'out_of_service',
             default => 'unknown',
         };
+    }
+
+    private function formatSuiteLabel(?string $number): ?string
+    {
+        if ($number === null || $number === '') {
+            return null;
+        }
+
+        $trimmed = trim($number);
+        if (str_starts_with(strtolower($trimmed), 'suite')) {
+            return $trimmed;
+        }
+
+        return 'Suite ' . $trimmed;
     }
 
     private function emptySummary(): array

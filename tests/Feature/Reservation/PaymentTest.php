@@ -99,19 +99,7 @@ class PaymentTest extends TestCase
         $start = \Carbon\Carbon::parse($asOfDate)->addDays(5)->toDateString();
         $end = \Carbon\Carbon::parse($start)->addDays(4)->toDateString();
 
-        $room = null;
-        foreach (\App\Models\Room::where('active', 1)->where('roomStatus', 1)->whereHas('roomType')->get() as $candidate) {
-            $overlap = \App\Models\ReservationRoom::where('room_id', $candidate->id)
-                ->whereHas('reservation', function ($query) use ($start, $end) {
-                    $query->where('start_date', '<', $end)
-                        ->where('expire_date', '>', $start);
-                })->exists();
-            if (!$overlap) {
-                $room = $candidate;
-                break;
-            }
-        }
-
+        $room = $this->findOrCreateAvailableRoom($start, $end);
         if (!$room) {
             return null;
         }

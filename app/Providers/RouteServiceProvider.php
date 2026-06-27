@@ -39,6 +39,11 @@ class RouteServiceProvider extends ServiceProvider
                 ->by($request->ip());
         });
 
+        RateLimiter::for('report-download', function (Request $request) {
+            return Limit::perMinute((int) env('API_RATE_LIMIT_REPORT_DOWNLOAD', 30))
+                ->by($request->ip());
+        });
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')

@@ -43,6 +43,25 @@ class ReportEmailExportTest extends TestCase
             ?->delete();
     }
 
+    public function test_user_can_download_full_pdf_directly(): void
+    {
+        $user = $this->userWithApiPermissions(['view reports', 'view financial reports']);
+
+        $response = $this->actingAs($user, 'api')->get(
+            '/api/users/reports/accrual-revenue/download?'
+            . http_build_query([
+                'format' => 'pdf',
+                'start_date' => '2026-06-01',
+                'end_date' => '2026-06-30',
+            ])
+        );
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+        $this->assertGreaterThan(1000, strlen($response->getContent()));
+    }
+
     public function test_process_pending_command_generates_file_and_marks_ready(): void
     {
         Mail::fake();
@@ -164,5 +183,25 @@ class ReportEmailExportTest extends TestCase
         $this->assertArrayHasKey('total_rows', $response->json('data'));
         $this->assertArrayHasKey('last_page', $response->json('data'));
         $this->assertArrayHasKey('is_truncated', $response->json('data'));
+    }
+
+    public function test_for_export_returns_up_to_preview_limit_rows(): void
+    {
+        config(['reports.page_size' => 50, 'reports.preview_limit' => 500]);
+
+        $user = $this->userWithApiPermissions(['view reports', 'view financial reports']);
+
+        $response = $this->actingAs($user, 'api')->getJson(
+            '/api/users/reports/reservations-list?start_date=2026-08-01&end_date=2026-08-31&for_export=1'
+        );
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.current_page', 1);
+        $response->assertJsonPath('data.last_page', 1);
+        $this->assertArrayHasKey('export_limit', $response->json('data'));
+        $totalRows = (int) $response->json('data.total_rows');
+        $rowCount = count($response->json('data.rows') ?? []);
+        $this->assertSame(min($totalRows, 500), $rowCount);
     }
 }

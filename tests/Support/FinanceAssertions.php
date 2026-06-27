@@ -80,4 +80,67 @@ trait FinanceAssertions
 
         return null;
     }
+
+    /**
+     * @param  array{summary?: array<int, array{label: string, value: mixed}>}  $reportData
+     */
+    protected function reportSummaryString(array $reportData, string $label): ?string
+    {
+        foreach ($reportData['summary'] ?? [] as $item) {
+            if (($item['label'] ?? '') === $label) {
+                $value = $item['value'] ?? null;
+
+                return is_scalar($value) ? (string) $value : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{summary?: array<int, array{label: string, value: mixed}>}  $reportData
+     */
+    protected function assertReportSummaryEquals(
+        array $reportData,
+        string $label,
+        float $expected,
+        float $delta = 0.10,
+        string $context = ''
+    ): void {
+        $actual = $this->reportSummaryValue($reportData, $label);
+        $prefix = $context !== '' ? "{$context}: " : '';
+        Assert::assertNotNull($actual, $prefix . "summary label missing: {$label}");
+        Assert::assertEqualsWithDelta($expected, $actual, $delta, $prefix . $label);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    protected function assertRowSumEquals(array $rows, string $key, float $expected, float $delta = 0.10, string $context = ''): void
+    {
+        $sum = round(collect($rows)->sum(fn ($r) => (float) ($r[$key] ?? 0)), 2);
+        $prefix = $context !== '' ? "{$context}: " : '';
+        Assert::assertEqualsWithDelta($expected, $sum, $delta, $prefix . "sum({$key})");
+    }
+
+    /**
+     * @param  array{summary?: array<int, array{label: string, value: mixed}>}  $reportData
+     */
+    protected function parsePercentSummary(array $reportData, string $label): float
+    {
+        foreach ($reportData['summary'] ?? [] as $item) {
+            if (($item['label'] ?? '') !== $label) {
+                continue;
+            }
+            $raw = $item['value'] ?? null;
+            if (is_numeric($raw)) {
+                return (float) $raw;
+            }
+            if (is_string($raw)) {
+                return (float) str_replace('%', '', trim($raw));
+            }
+        }
+
+        return 0.0;
+    }
 }

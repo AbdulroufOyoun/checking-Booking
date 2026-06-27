@@ -38,6 +38,8 @@ class AdminSeeder extends Seeder
         // Keep admin role synced with every permission (including newly added ones).
         $adminRole->syncPermissions(Permission::where('guard_name', 'api')->get());
 
+        $password = config('hotel.admin_password_override', self::PASSWORD);
+
         $admin = User::updateOrCreate(
             ['job_number' => self::JOB_NUMBER],
             [
@@ -48,7 +50,7 @@ class AdminSeeder extends Seeder
                 'mobile' => '0555555555',
                 'discount_id' => null,
                 'active' => 1,
-                'password' => Hash::make(self::PASSWORD),
+                'password' => Hash::make($password),
             ]
         );
 
@@ -60,7 +62,11 @@ class AdminSeeder extends Seeder
 
         $this->command->info('Admin user seeded successfully.');
         $this->command->line('  Job number : ' . self::JOB_NUMBER);
-        $this->command->line('  Password   : ' . self::PASSWORD);
+        if (!config('hotel.admin_password_override')) {
+            $this->command->line('  Password   : ' . self::PASSWORD);
+        } else {
+            $this->command->line('  Password   : (custom — not printed)');
+        }
         $this->command->line('  Email      : ' . self::EMAIL);
     }
 

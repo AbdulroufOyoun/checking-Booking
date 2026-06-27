@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Reservation;
 use App\Services\PricingEngine;
+use App\Services\ReservationFinancialService;
 use App\Services\RevenueAccrualService;
 use Illuminate\Console\Command;
 
@@ -16,8 +17,11 @@ class BackfillReservationDailyCharges extends Command
 
     protected $description = 'Generate reservation_daily_charges for existing reservations';
 
-    public function handle(PricingEngine $pricingEngine, RevenueAccrualService $revenueAccrualService): int
-    {
+    public function handle(
+        PricingEngine $pricingEngine,
+        RevenueAccrualService $revenueAccrualService,
+        ReservationFinancialService $reservationFinancialService
+    ): int {
         $query = Reservation::with(['reservationRooms.room']);
 
         if ($id = $this->option('reservation_id')) {
@@ -36,6 +40,7 @@ class BackfillReservationDailyCharges extends Command
         $query->orderBy('id')->chunk(50, function ($reservations) use (
             $pricingEngine,
             $revenueAccrualService,
+            $reservationFinancialService,
             $syncBase,
             &$count,
             &$mismatch
@@ -69,23 +74,12 @@ class BackfillReservationDailyCharges extends Command
                 }
 
                 if ($syncBase && $totalBase > 0) {
-                    $subtotal = $totalBase
-                        - (float) $reservation->discount
-                        + (float) $reservation->extras
-                        + (float) $reservation->penalties;
-                    $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);
-                    $total = round($subtotal + $taxes, 2);
-
                     if (abs((float) $reservation->base_price - $totalBase) >= 0.02) {
                         $mismatch++;
                     }
 
-                    $reservation->update([
-                        'base_price' => round($totalBase, 2),
-                        'subtotal'   => round($subtotal, 2),
-                        'taxes'      => $taxes,
-                        'total'      => $total,
-                    ]);
+                    $reservationFinancialService->syncTotalsFromDailyCharges($reservation, preservePaidInFull: true);
+                    $reservation->save();
                 }
 
                 $count++;
@@ -95,6 +89,25 @@ class BackfillReservationDailyCharges extends Command
         $this->info("Backfilled daily charges for {$count} reservation(s).");
         if ($syncBase) {
             $this->info("Base price synced on {$count} reservation(s); {$mismatch} had prior base mismatch.");
+        }
+
+        $posted = app(\App\Services\Accounting\AccountingPostingService::class)->backfillAllAccruals();
+        $this->info("Synced {$posted} accrual journal entries.");
+
+        $confirmed = 0;
+        Reservation::query()
+            ->where('reservation_status', Reservation::STATUS_PENDING_PAYMENT)
+            ->with('payments')
+            ->orderBy('id')
+            ->chunkById(50, function ($reservations) use (&$confirmed) {
+                foreach ($reservations as $reservation) {
+                    if ($reservation->syncConfirmationIfFullyPaid()) {
+                        $confirmed++;
+                    }
+                }
+            });
+        if ($confirmed > 0) {
+            $this->info("Promoted {$confirmed} fully paid pending reservation(s) to confirmed.");
         }
 
         return self::SUCCESS;

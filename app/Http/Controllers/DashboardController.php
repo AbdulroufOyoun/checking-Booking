@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Reservation;
 use App\Models\ReservationPay;
+use App\Services\CollectionsService;
 use App\Services\RevenueAccrualService;
 use App\Services\RoomOccupancyService;
 use Carbon\Carbon;
@@ -13,7 +14,8 @@ class DashboardController extends Controller
 {
     public function __construct(
         private RoomOccupancyService $occupancyService,
-        private RevenueAccrualService $revenueAccrualService
+        private RevenueAccrualService $revenueAccrualService,
+        private CollectionsService $collectionsService
     ) {
     }
 
@@ -66,6 +68,7 @@ class DashboardController extends Controller
                 'month_cash_net' => round($cash['net_earnings'], 2),
                 'weekly_accrual' => $weeklyAccrual,
                 'recent_reservations' => $recent,
+                'collections' => $this->collectionsService->summarize($today),
             ]);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
@@ -74,21 +77,18 @@ class DashboardController extends Controller
 
     private function weeklyAccrual(Carbon $today): array
     {
+        $weekStart = $today->copy()->subDays(6)->startOfDay();
+        $weekEnd = $today->copy()->endOfDay();
+        $totalsByDate = $this->revenueAccrualService->dailyRevenueTotals($weekStart, $weekEnd);
+
         $labels = [];
         $values = [];
 
         for ($i = 6; $i >= 0; $i--) {
             $day = $today->copy()->subDays($i);
-            $dayRevenue = $this->revenueAccrualService->calculate(
-                'total',
-                null,
-                $day->copy()->startOfDay(),
-                $day->copy()->startOfDay(),
-                false
-            );
-
-            $labels[] = $day->toDateString();
-            $values[] = round((float) ($dayRevenue['current']['total'] ?? 0), 2);
+            $iso = $day->toDateString();
+            $labels[] = $iso;
+            $values[] = (float) ($totalsByDate[$iso] ?? 0.0);
         }
 
         return [
@@ -99,13 +99,20 @@ class DashboardController extends Controller
 
     private function earningsForPeriod(Carbon $start, Carbon $end): array
     {
+        $bounds = \App\Support\ReservationCashQuery::cashPeriodBounds($start, $end);
+        if ($bounds === null) {
+            return ['total_in' => 0.0, 'total_out' => 0.0, 'net_earnings' => 0.0];
+        }
+
+        [$periodStart, $periodEnd] = $bounds;
+
         $payments = \App\Support\ReservationCashQuery::paymentQuery()
-            ->whereBetween('reservation_pay.created_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->selectRaw('COALESCE(SUM(pay), 0) as total_in')
             ->value('total_in');
 
         $refunds = \App\Support\ReservationCashQuery::refundQuery()
-            ->whereBetween('reservation_pay.created_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->selectRaw('COALESCE(SUM(pay), 0) as total_out')
             ->value('total_out');
 

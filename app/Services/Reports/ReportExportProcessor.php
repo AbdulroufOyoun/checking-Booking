@@ -9,16 +9,6 @@ use Illuminate\Support\Facades\Storage;
 
 class ReportExportProcessor
 {
-    private const ACCOUNTING_SLUGS = [
-        'chart-of-accounts',
-        'journal-entries',
-        'general-ledger',
-        'trial-balance',
-        'balance-sheet',
-        'cash-flow',
-        'financial-audit-log',
-    ];
-
     public function __construct(
         private ReportQueryService $reportQueryService,
         private ReportExcelWriter $excelWriter,
@@ -80,6 +70,37 @@ class ReportExportProcessor
         }
     }
 
+    /**
+     * Build a full report file for immediate browser download (no row cap).
+     *
+     * @param  array<string, string|null>  $params
+     * @return array{content: string, filename: string, mime: string}
+     */
+    public function buildDownload(string $slug, string $format, array $params): array
+    {
+        @set_time_limit(300);
+        @ini_set('memory_limit', '512M');
+
+        $data = $this->reportQueryService->run($slug, $params);
+        $end = $params['end_date'] ?? now()->toDateString();
+        $extension = $format === ReportExport::FORMAT_PDF ? 'pdf' : 'xlsx';
+        $filename = $slug . '-' . $end . '.' . $extension;
+
+        if ($format === ReportExport::FORMAT_PDF) {
+            return [
+                'content' => $this->pdfWriter->render($slug, $data),
+                'filename' => $filename,
+                'mime' => 'application/pdf',
+            ];
+        }
+
+        return [
+            'content' => $this->excelWriter->render($data['columns'] ?? [], $data['rows'] ?? []),
+            'filename' => $filename,
+            'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ];
+    }
+
     public function cleanupExpired(): int
     {
         $deleted = 0;
@@ -100,12 +121,12 @@ class ReportExportProcessor
 
     public static function slugRequiresAccountingPermission(string $slug): bool
     {
-        return in_array($slug, self::ACCOUNTING_SLUGS, true);
+        return ReportCatalog::slugRequiresAccountingPermission($slug);
     }
 
     public static function isValidSlug(string $slug): bool
     {
-        return in_array($slug, self::allSlugs(), true);
+        return in_array($slug, ReportCatalog::allSlugs(), true);
     }
 
     /**
@@ -113,14 +134,7 @@ class ReportExportProcessor
      */
     public static function allSlugs(): array
     {
-        return [
-            'overview', 'room-board', 'arrivals-departures', 'reservations-list', 'occupancy',
-            'accrual-revenue', 'cash-box', 'revenue-summary', 'accrual-cash-reconciliation',
-            'ar-aging', 'adjustments', 'tax', 'revpar', 'by-dimension', 'peak-analysis',
-            'payments-refunds', 'closing-package', 'chart-of-accounts', 'journal-entries',
-            'general-ledger', 'trial-balance', 'balance-sheet', 'cash-flow',
-            'financial-audit-log',
-        ];
+        return ReportCatalog::allSlugs();
     }
 
     /**

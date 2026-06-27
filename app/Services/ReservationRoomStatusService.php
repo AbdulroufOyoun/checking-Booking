@@ -20,6 +20,7 @@ class ReservationRoomStatusService
 
         if (Reservation::isCancelled((int) $reservation->reservation_status)) {
             $this->releaseRoomsAfterCancellation($reservation, false);
+            OccupancyBoardCache::bump();
 
             return;
         }
@@ -34,6 +35,8 @@ class ReservationRoomStatusService
                 Room::where('id', $resRoom->room_id)->update(['roomStatus' => self::ROOM_OCCUPIED]);
             }
         }
+
+        OccupancyBoardCache::bump();
     }
 
     /**
@@ -64,6 +67,8 @@ class ReservationRoomStatusService
             ->where('active', 1)
             ->where('roomStatus', '!=', self::ROOM_OUT_OF_SERVICE)
             ->update(['roomStatus' => self::ROOM_PREPARATION]);
+
+        OccupancyBoardCache::bump();
     }
 
     /**
@@ -123,6 +128,8 @@ class ReservationRoomStatusService
                 ->where('active', 1)
                 ->whereNotIn('roomStatus', [self::ROOM_PREPARATION, self::ROOM_OUT_OF_SERVICE])
                 ->update(['roomStatus' => self::ROOM_AVAILABLE]);
+
+            OccupancyBoardCache::bump();
         }
     }
 }

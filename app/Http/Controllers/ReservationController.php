@@ -12,6 +12,7 @@ use App\Models\RoomtypePricingplan;
 use App\Models\Suite;
 use App\Models\ReservationPay;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\Reservation\MakeReservationRequest;
 use App\Http\Requests\GetByClientIdRequest;
@@ -31,6 +32,7 @@ use App\Services\PricingEngine;
 use App\Services\RevenueAccrualService;
 use App\Services\ReservationRoomStatusService;
 use App\Services\Accounting\AccountingPostingService;
+use App\Services\ReservationFinancialService;
 use App\Services\RefundPolicyService;
 use App\Exceptions\RefundNotAllowedException;
 use App\Http\Requests\Reservation\CancelReservationRequest;
@@ -44,6 +46,7 @@ class ReservationController extends Controller
         private RevenueAccrualService $revenueAccrualService,
         private ReservationRoomStatusService $roomStatusService,
         private AccountingPostingService $accountingPostingService,
+        private ReservationFinancialService $reservationFinancialService,
         private RefundPolicyService $refundPolicyService
     ) {
     }
@@ -91,7 +94,25 @@ class ReservationController extends Controller
                 });
             }
 
-            $reservations = $query->orderByDesc('start_date')->orderByDesc('id')->paginate($perPage);
+            if ($request->boolean('has_balance_due')) {
+                $query->withPositiveBalance();
+            }
+
+            if ($request->input('sort') === 'balance_due') {
+                $paymentType = \App\Models\ReservationPay::TYPE_PAYMENT;
+                $refundType = \App\Models\ReservationPay::TYPE_REFUND;
+                $query->orderByRaw(
+                    '(reservations.total - COALESCE((
+                        SELECT SUM(CASE WHEN rp.type = ? THEN rp.pay WHEN rp.type = ? THEN -rp.pay ELSE 0 END)
+                        FROM reservation_pay rp WHERE rp.reservation_id = reservations.id
+                    ), 0)) DESC',
+                    [$paymentType, $refundType]
+                )->orderByDesc('id');
+            } else {
+                $query->orderByDesc('start_date')->orderByDesc('id');
+            }
+
+            $reservations = $query->paginate($perPage);
 
             return \Pagination($reservations);
         } catch (\Exception $e) {
@@ -129,6 +150,8 @@ class ReservationController extends Controller
                 'room_numbers' => $roomNumbers,
                 'room_numbers_label' => $roomNumbers !== [] ? implode(', ', array_map('strval', $roomNumbers)) : null,
             ]);
+        } catch (ModelNotFoundException) {
+            return \Failed('Reservation not found', 404);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }
@@ -226,7 +249,9 @@ class ReservationController extends Controller
                 $reservation->penalties = (float) $request->penalties;
             }
 
-            $this->recalculateReservationPricing($reservation);
+            if ($this->reservationFinancialService->requestNeedsPricingRecalculation($request, $reservation)) {
+                $this->recalculateReservationPricing($reservation);
+            }
 
             if ($isCheckingOut) {
                 $balance = $reservation->balanceDue();
@@ -429,6 +454,7 @@ class ReservationController extends Controller
                     (int) $reservation->rent_type,
                     $lines
                 );
+                $this->accountingPostingService->syncAccrualForReservationRoom($resRoom->id);
             }
 
             $reservation->base_price = round($totalBase, 2);
@@ -456,39 +482,16 @@ class ReservationController extends Controller
         try {
             $reservation = Reservation::with('payments')->findOrFail($id);
 
-            if (Reservation::isCancelled((int) $reservation->reservation_status)) {
-                return \Failed('Cannot add payment to a cancelled reservation.');
-            }
-
-            $balanceDue = $reservation->balanceDue();
-
-            if ((float) $request->pay > $balanceDue + 0.005) {
-                return \Failed('Payment amount exceeds the remaining balance.');
-            }
-
-            $payment = ReservationPay::create([
-                'reservation_id' => $reservation->id,
-                'pay'            => $request->pay,
-                'type'           => (int) ($request->type ?? ReservationPay::TYPE_PAYMENT),
-                'user_id'        => auth()->id(),
-            ]);
-
-            if ((int) $payment->type === ReservationPay::TYPE_PAYMENT) {
-                $paid = (float) $reservation->payments()
-                    ->where('type', ReservationPay::TYPE_PAYMENT)
-                    ->sum('pay');
-                $refunded = (float) $reservation->payments()
-                    ->where('type', ReservationPay::TYPE_REFUND)
-                    ->sum('pay');
-                if (($paid - $refunded) >= (float) $reservation->total) {
-                    $reservation->reservation_status = Reservation::STATUS_CONFIRMED;
-                    $reservation->save();
-                }
-            }
-
-            $this->accountingPostingService->postPayment($payment);
+            $payment = $this->reservationFinancialService->recordPayment(
+                $reservation,
+                (float) $request->pay,
+                (int) auth()->id(),
+                (int) ($request->type ?? ReservationPay::TYPE_PAYMENT)
+            );
 
             return \SuccessData('Payment recorded', $payment);
+        } catch (\InvalidArgumentException $e) {
+            return \Failed($e->getMessage(), 422);
         } catch (\Exception $e) {
             return \Failed($e->getMessage());
         }
@@ -606,6 +609,8 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
                 'type'           => $request->pay_type ?? 0,
                 'user_id'        => $user->id,
             ]);
+            $reservation->load('payments');
+            $reservation->syncConfirmationIfFullyPaid();
         }
 
         $numRooms = count($roomsData);
@@ -639,6 +644,7 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
                 (int) $request->rent_type,
                 $dailyLines
             );
+            $this->accountingPostingService->syncAccrualForReservationRoom($resRoom->id);
 
             $roomTypePlan = RoomtypePricingplan::where('roomtype_id', $room->room_type_id)
                 ->whereHas('pricingplan', function ($q) use ($startDate, $endDate) {
@@ -1366,6 +1372,7 @@ case 2:
                 (int) $reservation->rent_type,
                 $lines
             );
+            $this->accountingPostingService->syncAccrualForReservationRoom($resRoom->id);
         }
 
         $reservation->base_price = round($totalBase, 2);
@@ -1375,6 +1382,7 @@ case 2:
         );
         $reservation->taxes = round($reservation->subtotal * 0.15, 2, PHP_ROUND_HALF_UP);
         $reservation->total = round($reservation->subtotal + $reservation->taxes, 2);
+        $this->reservationFinancialService->syncTotalsFromDailyCharges($reservation, preservePaidInFull: true);
     }
 
     private function resolveCalendarState(Reservation $r, float $paidNet, float $balanceDue): string

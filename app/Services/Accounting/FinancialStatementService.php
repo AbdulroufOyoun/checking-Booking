@@ -140,6 +140,11 @@ class FinancialStatementService
         $liabilities = $this->mapBalanceSheetSection($accounts->where('type', 'liability'));
         $equity = $this->mapBalanceSheetSection($accounts->where('type', 'equity'));
 
+        $netIncome = $this->cumulativeNetIncome($asOfDate);
+        if (abs($netIncome) >= 0.005) {
+            $equity = $this->mergeNetIncomeIntoEquity($equity, $netIncome);
+        }
+
         $totalAssets = round(collect($assets)->sum('balance'), 2);
         $totalLiabilities = round(collect($liabilities)->sum('balance'), 2);
         $totalEquity = round(collect($equity)->sum('balance'), 2);
@@ -153,10 +158,54 @@ class FinancialStatementService
                 'assets' => $totalAssets,
                 'liabilities' => $totalLiabilities,
                 'equity' => $totalEquity,
+                'net_income_included' => round($netIncome, 2),
                 'liabilities_and_equity' => round($totalLiabilities + $totalEquity, 2),
                 'balanced' => abs($totalAssets - ($totalLiabilities + $totalEquity)) < 0.02,
             ],
         ];
+    }
+
+    /**
+     * Revenue and expense accounts are closed into retained earnings for balance-sheet presentation.
+     */
+    private function cumulativeNetIncome(Carbon $asOfDate): float
+    {
+        $accounts = $this->accountBalances(null, null, $asOfDate)
+            ->filter(fn ($a) => in_array($a->type, ['revenue', 'expense'], true));
+
+        $revenue = round($accounts->where('type', 'revenue')->sum('balance'), 2);
+        $expenses = round($accounts->where('type', 'expense')->sum('balance'), 2);
+
+        return round($revenue - $expenses, 2);
+    }
+
+    /**
+     * @param  array<int, array{account_id: int, code: string, name: string, balance: float}>  $equity
+     * @return array<int, array{account_id: int, code: string, name: string, balance: float}>
+     */
+    private function mergeNetIncomeIntoEquity(array $equity, float $netIncome): array
+    {
+        $merged = false;
+        foreach ($equity as &$row) {
+            if ($row['code'] === '3000') {
+                $row['balance'] = round($row['balance'] + $netIncome, 2);
+                $merged = true;
+                break;
+            }
+        }
+        unset($row);
+
+        if (!$merged) {
+            $retained = ChartOfAccount::query()->where('code', '3000')->first();
+            $equity[] = [
+                'account_id' => $retained?->id ?? 0,
+                'code' => '3000',
+                'name' => $retained?->name_en ?? 'Retained Earnings',
+                'balance' => $netIncome,
+            ];
+        }
+
+        return collect($equity)->sortBy('code')->values()->all();
     }
 
     public function cashFlow(Carbon $start, Carbon $end): array

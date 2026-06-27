@@ -314,18 +314,19 @@ class FinancialDashboardService
      */
     private function cashForPeriod(Carbon $start, Carbon $end): array
     {
+        $bounds = \App\Support\ReservationCashQuery::cashPeriodBounds($start, $end);
+        if ($bounds === null) {
+            return ['total_in' => 0.0, 'total_out' => 0.0, 'net_earnings' => 0.0];
+        }
+
+        [$periodStart, $periodEnd] = $bounds;
+
         $totalIn = (float) \App\Support\ReservationCashQuery::paymentQuery()
-            ->whereBetween('reservation_pay.created_at', [
-                $start->copy()->startOfDay(),
-                $end->copy()->endOfDay(),
-            ])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->sum('reservation_pay.pay');
 
         $totalOut = (float) \App\Support\ReservationCashQuery::refundQuery()
-            ->whereBetween('reservation_pay.created_at', [
-                $start->copy()->startOfDay(),
-                $end->copy()->endOfDay(),
-            ])
+            ->whereBetween('reservation_pay.created_at', [$periodStart, $periodEnd])
             ->sum('reservation_pay.pay');
 
         return [

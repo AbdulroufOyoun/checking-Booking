@@ -19,6 +19,7 @@ class RefundPolicyResource extends JsonResource
             'days_before_checkin' => $this->days_before_checkin,
             'refund_percent' => $this->refund_percent,
             'payment_status' => $this->payment_status,
+            'payment_statuses' => $this->resource->resolvedPaymentStatuses(),
             'during_stay' => $this->during_stay,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

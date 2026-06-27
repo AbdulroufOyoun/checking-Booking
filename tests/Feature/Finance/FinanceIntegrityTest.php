@@ -7,27 +7,19 @@ use App\Models\ReservationDailyCharge;
 use App\Services\PricingEngine;
 use App\Services\RevenueAccrualService;
 use Carbon\Carbon;
-use Database\Seeders\ReservationTestDataSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Tests\Support\FinanceAssertions;
+use Tests\Support\FinanceTestBootstrap;
 use Tests\TestCase;
 
 class FinanceIntegrityTest extends TestCase
 {
     use FinanceAssertions;
-
-    protected function seedFinanceData(): void
-    {
-        $this->artisan('db:seed', [
-            '--class' => ReservationTestDataSeeder::class,
-            '--force' => true,
-            '--no-interaction' => true,
-        ]);
-    }
+    use FinanceTestBootstrap;
 
     public function test_finance_audit_command_passes_after_seed(): void
     {
-        $this->seedFinanceData();
+        $this->bootstrapFinanceData();
 
         $exit = Artisan::call('finance:audit');
         $this->assertSame(0, $exit, Artisan::output());
@@ -35,7 +27,7 @@ class FinanceIntegrityTest extends TestCase
 
     public function test_all_confirmed_reservations_satisfy_financial_contract(): void
     {
-        $this->seedFinanceData();
+        $this->bootstrapFinanceData();
 
         $confirmed = Reservation::where('reservation_status', 1)
             ->whereHas('reservationRooms')
@@ -53,7 +45,7 @@ class FinanceIntegrityTest extends TestCase
 
     public function test_repricing_engine_matches_stored_charges_for_2026(): void
     {
-        $this->seedFinanceData();
+        $this->bootstrapFinanceData();
 
         $engine = app(PricingEngine::class);
 
@@ -68,10 +60,10 @@ class FinanceIntegrityTest extends TestCase
 
     public function test_accrual_revenue_equals_sum_of_allocated_charge_revenue(): void
     {
-        $this->seedFinanceData();
+        $this->bootstrapFinanceData();
 
-        $start = Carbon::parse('2026-08-01');
-        $end = Carbon::parse('2026-08-31');
+        $start = Carbon::parse(self::FINANCE_PERIOD_START);
+        $end = Carbon::parse(self::FINANCE_PERIOD_END);
         $service = app(RevenueAccrualService::class);
         $accrual = $service->calculate('total', null, $start, $end, true);
 
@@ -93,7 +85,7 @@ class FinanceIntegrityTest extends TestCase
 
     public function test_cancelled_reservations_excluded_from_accrual_details(): void
     {
-        $this->seedFinanceData();
+        $this->bootstrapFinanceData();
 
         $service = app(RevenueAccrualService::class);
         $accrual = $service->calculate('total', null, Carbon::parse('2026-06-01'), Carbon::parse('2026-09-30'), true);

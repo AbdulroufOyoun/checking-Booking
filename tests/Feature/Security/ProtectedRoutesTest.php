@@ -42,6 +42,31 @@ class ProtectedRoutesTest extends TestCase
         $export->delete();
     }
 
+    public function test_report_export_download_requires_token_even_for_owner(): void
+    {
+        $user = User::first();
+        $this->assertNotNull($user);
+
+        $export = \App\Models\ReportExport::create([
+            'user_id' => $user->id,
+            'slug' => 'occupancy',
+            'file_format' => \App\Models\ReportExport::FORMAT_EXCEL,
+            'recipient_email' => 'ops@hotel.test',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-07',
+            'status' => \App\Models\ReportExport::STATUS_READY,
+            'file_path' => 'reports/missing.xlsx',
+            'download_token' => \App\Models\ReportExport::generateToken(),
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $this->actingAs($user, 'api')
+            ->getJson('/api/users/reports/exports/' . $export->id . '/download')
+            ->assertStatus(403);
+
+        $export->delete();
+    }
+
     public function test_add_building_forbidden_without_manage_buildings_permission(): void
     {
         $user = $this->userWithOnlyPermissions(['view buildings']);

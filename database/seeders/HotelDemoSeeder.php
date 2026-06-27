@@ -14,6 +14,7 @@ use App\Models\Penaltie;
 use App\Models\Pricingplan;
 use App\Models\Reservation;
 use App\Models\ReservationPay;
+use App\Support\ReservationCashQuery;
 use App\Models\ReservationRoom;
 use App\Models\Reservation_source;
 use App\Models\ReservationDailyCharge;
@@ -431,13 +432,16 @@ class HotelDemoSeeder extends Seeder
         $this->createRoomPriceSnapshot($room, $resRoom->id, $startDate, $endDate, $rentType);
 
         if ($payAmount > 0) {
+            $paidAt = ReservationCashQuery::capPaymentTimestampToToday(
+                $startDate->copy()->subDays(random_int(0, 5))
+            );
             ReservationPay::create([
                 'reservation_id' => $reservation->id,
                 'pay' => $payAmount,
                 'type' => ReservationPay::TYPE_PAYMENT,
                 'user_id' => $this->userId,
-                'created_at' => $startDate->copy()->subDays(random_int(0, 5)),
-                'updated_at' => $startDate->copy()->subDays(random_int(0, 5)),
+                'created_at' => $paidAt,
+                'updated_at' => $paidAt,
             ]);
 
             if ($payMode === 'full' && random_int(0, 40) === 0 && $endDate->lt(Carbon::today())) {
