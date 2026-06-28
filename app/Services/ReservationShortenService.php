@@ -50,7 +50,7 @@ class ReservationShortenService
     {
         $this->validateShorten($reservation, $newExpire);
 
-        return DB::transaction(function () use ($reservation, $newExpire) {
+        $apply = function () use ($reservation, $newExpire): Reservation {
             $reservation->loadMissing('reservationRooms');
 
             $newExpireStr = $newExpire->toDateString();
@@ -83,6 +83,8 @@ class ReservationShortenService
             $this->roomStatusService->syncForReservation($reservation->fresh(['reservationRooms']));
 
             return $reservation->fresh(['payments', 'reservationRooms']);
-        });
+        };
+
+        return DB::transactionLevel() > 0 ? $apply() : DB::transaction($apply);
     }
 }

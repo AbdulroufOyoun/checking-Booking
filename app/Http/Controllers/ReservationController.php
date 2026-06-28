@@ -135,24 +135,7 @@ class ReservationController extends Controller
                 'user',
             ])->findOrFail($id);
 
-            $dailyCharges = ReservationDailyCharge::where('reservation_id', $id)
-                ->orderBy('charge_date')
-                ->get();
-
-            $roomNumbers = $reservation->reservationRooms
-                ->map(fn ($row) => $row->room?->number)
-                ->filter(fn ($n) => $n !== null && $n !== '')
-                ->values()
-                ->all();
-
-            return \SuccessData('Reservation retrieved', [
-                'reservation' => $reservation,
-                'daily_charges' => $dailyCharges,
-                'paid_amount' => $reservation->paidNetAmount(),
-                'balance_due' => $reservation->balanceDue(),
-                'room_numbers' => $roomNumbers,
-                'room_numbers_label' => $roomNumbers !== [] ? implode(', ', array_map('strval', $roomNumbers)) : null,
-            ]);
+            return \SuccessData('Reservation retrieved', $this->reservationDetailPayload($reservation));
         } catch (ModelNotFoundException) {
             return \Failed('Reservation not found', 404);
         } catch (\Exception $e) {
@@ -795,13 +778,25 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
 
             DB::commit();
 
-            return \SuccessData('Refund processed successfully', [
-                'refund_id' => $refundPay->id,
-                'amount' => $finalRefundAmount,
-                'policy_name' => $policyQuery->name,
-                'breakdown' => $preview['breakdown'],
-                'partial_cancel' => $newExpireDate !== null,
-            ]);
+            $reservation = Reservation::with([
+                'client',
+                'reservationRooms.room.roomType',
+                'reservationRooms.room.building',
+                'reservationRooms.room.floor',
+                'payments',
+                'user',
+            ])->findOrFail($request->reservation_id);
+
+            return \SuccessData('Refund processed successfully', array_merge(
+                $this->reservationDetailPayload($reservation),
+                [
+                    'refund_id' => $refundPay->id,
+                    'amount' => $finalRefundAmount,
+                    'policy_name' => $policyQuery->name,
+                    'breakdown' => $preview['breakdown'],
+                    'partial_cancel' => $newExpireDate !== null,
+                ]
+            ));
         } catch (RefundNotAllowedException $e) {
             DB::rollBack();
 
@@ -1479,5 +1474,30 @@ case 2:
         } catch (\Exception $e) {
             return Failed($e->getMessage());
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function reservationDetailPayload(Reservation $reservation): array
+    {
+        $dailyCharges = ReservationDailyCharge::where('reservation_id', $reservation->id)
+            ->orderBy('charge_date')
+            ->get();
+
+        $roomNumbers = $reservation->reservationRooms
+            ->map(fn ($row) => $row->room?->number)
+            ->filter(fn ($n) => $n !== null && $n !== '')
+            ->values()
+            ->all();
+
+        return [
+            'reservation' => $reservation,
+            'daily_charges' => $dailyCharges,
+            'paid_amount' => $reservation->paidNetAmount(),
+            'balance_due' => $reservation->balanceDue(),
+            'room_numbers' => $roomNumbers,
+            'room_numbers_label' => $roomNumbers !== [] ? implode(', ', array_map('strval', $roomNumbers)) : null,
+        ];
     }
 }

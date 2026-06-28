@@ -105,6 +105,7 @@ class ShortenReservationTest extends TestCase
         $refund->assertJsonPath('success', true);
         $this->assertEqualsWithDelta($amount, (float) $refund->json('data.amount'), 0.01);
         $refund->assertJsonPath('data.partial_cancel', true);
+        $refund->assertJsonPath('data.reservation.expire_date', $newExpire);
 
         $reservation->refresh();
         $this->assertEquals($newExpire, $reservation->expire_date);
