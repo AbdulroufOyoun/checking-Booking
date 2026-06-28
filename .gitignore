@@ -17,3 +17,9 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Cursor / AI tooling (local only — do not publish)
+.cursor/
+AGENTS.md
+boost.json
+.claude/
