@@ -3,6 +3,7 @@
 namespace Tests\Feature\Reservation;
 
 use App\Models\Client;
+use App\Models\RefundPolicy;
 use App\Models\Reservation;
 use App\Models\ReservationPay;
 use App\Models\Reservation_source;
@@ -99,6 +100,87 @@ class RefundPolicyTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_percent_threshold_before_start_requires_resolved_days(): void
+    {
+        Carbon::setTestNow('2026-06-11');
+
+        RefundPolicy::query()->where('timing', 'before_start')->delete();
+        RefundPolicy::create([
+            'name' => 'Percent before start — 50% of stay',
+            'rent_type' => 0,
+            'timing' => 'before_start',
+            'threshold_mode' => RefundPolicy::THRESHOLD_PERCENT_OF_STAY,
+            'threshold_percent' => 50,
+            'days_threshold' => 0,
+            'days_before_checkin' => 0,
+            'refund_percent' => 50,
+            'refund_basis' => 'remaining_nights',
+            'payment_status' => 2,
+            'during_stay' => 0,
+            'payment_statuses' => ['paid'],
+        ]);
+
+        $user = $this->userWithApiPermissions(['manage refunds']);
+        $reservation = $this->createPaidReservation('2026-06-15', '2026-06-23', $user);
+        $this->assertNotNull($reservation);
+
+        $preview = $this->actingAs($user, 'api')->getJson(
+            '/api/users/refund-policies/preview?reservation_id=' . $reservation->id
+        );
+        $preview->assertStatus(200);
+        $preview->assertJsonPath('success', true);
+        $this->assertEquals(4, (int) $preview->json('data.breakdown.resolved_threshold_days'));
+
+        Carbon::setTestNow('2026-06-12');
+        $tooLate = $this->actingAs($user, 'api')->getJson(
+            '/api/users/refund-policies/preview?reservation_id=' . $reservation->id
+        );
+        $tooLate->assertStatus(422);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_percent_threshold_after_start_applies_from_half_stay(): void
+    {
+        RefundPolicy::query()->where('during_stay', 1)->delete();
+        RefundPolicy::create([
+            'name' => 'Percent during stay — 50% of stay',
+            'rent_type' => null,
+            'timing' => 'after_start',
+            'threshold_mode' => RefundPolicy::THRESHOLD_PERCENT_OF_STAY,
+            'threshold_percent' => 50,
+            'days_threshold' => 0,
+            'days_before_checkin' => 0,
+            'refund_percent' => 40,
+            'refund_basis' => 'paid_net',
+            'payment_status' => 2,
+            'during_stay' => 1,
+            'payment_statuses' => ['paid'],
+        ]);
+
+        Carbon::setTestNow('2026-05-25');
+
+        $user = $this->userWithApiPermissions(['manage refunds']);
+        $reservation = $this->createPaidReservation('2026-06-01', '2026-06-09', $user);
+        $this->assertNotNull($reservation);
+
+        Carbon::setTestNow('2026-06-04');
+        $early = $this->actingAs($user, 'api')->getJson(
+            '/api/users/refund-policies/preview?reservation_id=' . $reservation->id
+        );
+        $early->assertStatus(422);
+
+        Carbon::setTestNow('2026-06-05');
+        $eligible = $this->actingAs($user, 'api')->getJson(
+            '/api/users/refund-policies/preview?reservation_id=' . $reservation->id
+        );
+        $eligible->assertStatus(200);
+        $eligible->assertJsonPath('success', true);
+        $this->assertEquals(4, (int) $eligible->json('data.breakdown.resolved_threshold_days'));
+
+        Carbon::setTestNow();
+    }
+
     public function test_refund_policy_crud(): void
     {
         $user = $this->userWithApiPermissions(['manage refund policies']);
@@ -107,6 +189,7 @@ class RefundPolicyTest extends TestCase
             'name' => 'Test policy',
             'rent_type' => 0,
             'timing' => 'before_start',
+            'threshold_mode' => 'fixed_days',
             'days_threshold' => 10,
             'refund_percent' => 75,
             'refund_basis' => 'total',
@@ -143,6 +226,7 @@ class RefundPolicyTest extends TestCase
             'name' => 'Any paid — 7+ days',
             'rent_type' => 0,
             'timing' => 'before_start',
+            'threshold_mode' => 'fixed_days',
             'days_threshold' => 7,
             'refund_percent' => 40,
             'refund_basis' => 'paid_net',
@@ -175,7 +259,8 @@ class RefundPolicyTest extends TestCase
             return null;
         }
 
-        $room = $this->findOrCreateAvailableRoom($startDate, $endDate);
+        $room = $this->findOrCreateAvailableRoom($startDate, $endDate)
+            ?? $this->createIsolatedTestRoom();
         if (!$room) {
             return null;
         }
@@ -197,7 +282,7 @@ class RefundPolicyTest extends TestCase
         ]);
 
         if ($create->status() !== 200 || !$create->json('success')) {
-            return null;
+            $this->fail('makeReservation failed: ' . ($create->json('message') ?? $create->getContent()));
         }
 
         $id = $create->json('data.id') ?? $create->json('data.reservation.id') ?? null;

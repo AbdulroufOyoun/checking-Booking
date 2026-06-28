@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\RefundPolicy;
 
+use App\Models\RefundPolicy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,6 +15,10 @@ class RefundPolicyResource extends JsonResource
             'name' => $this->name,
             'rent_type' => $this->rent_type,
             'timing' => $this->timing,
+            'threshold_mode' => $this->threshold_mode ?? RefundPolicy::THRESHOLD_FIXED_DAYS,
+            'threshold_percent' => $this->threshold_percent !== null
+                ? (float) $this->threshold_percent
+                : null,
             'days_threshold' => $this->days_threshold,
             'refund_basis' => $this->refund_basis,
             'days_before_checkin' => $this->days_before_checkin,

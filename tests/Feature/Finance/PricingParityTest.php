@@ -130,7 +130,7 @@ class PricingParityTest extends TestCase
             '--no-interaction' => true,
         ]);
 
-        $roomType = RoomType::where('name_en', 'Deluxe Test')->first();
+        $roomType = RoomType::where('name_en', 'Deluxe')->first();
         $this->assertNotNull($roomType);
 
         $room = Room::where('room_type_id', $roomType->id)->where('active', 1)->first();
@@ -177,7 +177,7 @@ class PricingParityTest extends TestCase
             '--no-interaction' => true,
         ]);
 
-        $roomType = RoomType::where('name_en', 'Deluxe Test')->first();
+        $roomType = RoomType::where('name_en', 'Deluxe')->first();
         $this->assertNotNull($roomType);
         $room = Room::where('room_type_id', $roomType->id)->where('active', 1)->first();
         $engine = app(PricingEngine::class);

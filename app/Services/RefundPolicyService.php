@@ -15,13 +15,13 @@ class RefundPolicyService
     /**
      * @return array<string, mixed>
      */
-    public function preview(Reservation $reservation): array
+    public function preview(Reservation $reservation, ?string $newExpireDate = null): array
     {
         $reservation->loadMissing(['payments', 'client']);
 
-        $this->assertRefundable($reservation);
+        $this->assertRefundable($reservation, $newExpireDate);
 
-        $context = $this->buildContext($reservation);
+        $context = $this->buildContext($reservation, $newExpireDate);
         $policy = $this->resolvePolicy($reservation, $context);
 
         if (!$policy) {
@@ -38,6 +38,8 @@ class RefundPolicyService
             );
         }
 
+        $resolvedThreshold = $policy->resolveThresholdDays((int) $context['total_nights']);
+
         return [
             'policy' => $policy,
             'refund_amount' => $amount,
@@ -46,17 +48,23 @@ class RefundPolicyService
                 'policy_name' => $policy->name,
                 'refund_percent' => (float) $policy->refund_percent,
                 'refund_basis' => $policy->refund_basis ?? 'total',
+                'threshold_mode' => $policy->threshold_mode ?? RefundPolicy::THRESHOLD_FIXED_DAYS,
+                'threshold_percent' => $policy->threshold_percent !== null
+                    ? (float) $policy->threshold_percent
+                    : null,
+                'resolved_threshold_days' => $resolvedThreshold,
+                'partial_cancel' => $newExpireDate !== null,
             ]),
         ];
     }
 
-    public function assertRefundable(Reservation $reservation): void
+    public function assertRefundable(Reservation $reservation, ?string $newExpireDate = null): void
     {
         if (Reservation::isCancelled((int) $reservation->reservation_status)) {
             throw new RefundNotAllowedException('Reservation already cancelled, cannot refund.');
         }
 
-        if ($reservation->expire_date < Carbon::today()->toDateString()) {
+        if ($newExpireDate === null && $reservation->expire_date < Carbon::today()->toDateString()) {
             throw new RefundNotAllowedException('Cannot refund a completed stay.');
         }
 
@@ -68,11 +76,12 @@ class RefundPolicyService
     /**
      * @return array<string, mixed>
      */
-    public function buildContext(Reservation $reservation): array
+    public function buildContext(Reservation $reservation, ?string $newExpireDate = null): array
     {
         $now = Carbon::now();
         $start = Carbon::parse($reservation->start_date)->startOfDay();
         $expire = Carbon::parse($reservation->expire_date)->startOfDay();
+        $totalNights = (int) $start->diffInDays($expire);
 
         $daysUntilStart = $now->lt($start) ? (int) $now->diffInDays($start, false) : 0;
         $daysSinceStart = $now->gte($start) ? (int) $start->diffInDays($now, false) : 0;
@@ -82,7 +91,7 @@ class RefundPolicyService
         $total = (float) $reservation->total;
         $paymentStatus = $netPaid <= 0 ? 0 : ($netPaid >= $total ? 2 : 1);
 
-        return [
+        $context = [
             'net_paid' => round($netPaid, 2),
             'total' => round($total, 2),
             'payment_status' => $paymentStatus,
@@ -90,14 +99,50 @@ class RefundPolicyService
             'days_until_start' => $daysUntilStart,
             'days_since_start' => $daysSinceStart,
             'during_stay' => $duringStay,
+            'total_nights' => $totalNights,
             'remaining_base' => round($this->remainingNightsBase($reservation), 2),
             'tax_rate' => self::TAX_RATE,
+        ];
+
+        if ($newExpireDate !== null) {
+            $cancelled = $this->cancelledNightsContext($reservation, $newExpireDate);
+            $context = array_merge($context, $cancelled);
+        }
+
+        return $context;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function cancelledNightsContext(Reservation $reservation, string $newExpireDate): array
+    {
+        $newExpire = Carbon::parse($newExpireDate)->startOfDay();
+        $currentExpire = Carbon::parse($reservation->expire_date)->startOfDay();
+
+        $cancelledBase = (float) ReservationDailyCharge::query()
+            ->where('reservation_id', $reservation->id)
+            ->where('charge_date', '>=', $newExpire->toDateString())
+            ->where('charge_date', '<', $currentExpire->toDateString())
+            ->sum('base_amount');
+
+        $cancelledCount = (int) ReservationDailyCharge::query()
+            ->where('reservation_id', $reservation->id)
+            ->where('charge_date', '>=', $newExpire->toDateString())
+            ->where('charge_date', '<', $currentExpire->toDateString())
+            ->count();
+
+        return [
+            'new_expire_date' => $newExpire->toDateString(),
+            'cancelled_nights_count' => $cancelledCount,
+            'cancelled_nights_base' => round($cancelledBase, 2),
         ];
     }
 
     public function resolvePolicy(Reservation $reservation, ?array $context = null): ?RefundPolicy
     {
         $context ??= $this->buildContext($reservation);
+        $totalNights = (int) $context['total_nights'];
 
         $candidates = RefundPolicy::query()
             ->where(function ($q) use ($reservation) {
@@ -106,13 +151,13 @@ class RefundPolicyService
             })
             ->get();
 
-        $matched = $candidates->filter(function (RefundPolicy $policy) use ($context) {
+        $matched = $candidates->filter(function (RefundPolicy $policy) use ($context, $totalNights) {
             if (!$policy->matchesPaymentContext($context)) {
                 return false;
             }
 
             $timing = $policy->timing ?? ((int) $policy->during_stay === 1 ? 'after_start' : 'before_start');
-            $threshold = (int) ($policy->days_threshold ?? $policy->days_before_checkin ?? 0);
+            $threshold = $policy->resolveThresholdDays($totalNights);
 
             if ($timing === 'before_start') {
                 return !$context['during_stay'] && $context['days_until_start'] >= $threshold;
@@ -121,9 +166,8 @@ class RefundPolicyService
             return $context['during_stay'] && $context['days_since_start'] >= $threshold;
         });
 
-        // Most specific rule wins (highest days threshold that still matches).
         return $matched->sortByDesc(
-            fn (RefundPolicy $p) => (int) ($p->days_threshold ?? $p->days_before_checkin ?? 0)
+            fn (RefundPolicy $p) => $p->resolveThresholdDays($totalNights)
         )->first();
     }
 
@@ -134,8 +178,15 @@ class RefundPolicyService
     ): float {
         $context ??= $this->buildContext($reservation);
         $netPaid = $context['net_paid'];
-        $basis = $policy->refund_basis ?? 'total';
         $percent = (float) $policy->refund_percent;
+
+        if (isset($context['cancelled_nights_base'])) {
+            $raw = ($context['cancelled_nights_base'] * (1 + self::TAX_RATE)) * ($percent / 100);
+
+            return round(min($raw, $netPaid), 2);
+        }
+
+        $basis = $policy->refund_basis ?? 'total';
 
         $raw = match ($basis) {
             'remaining_nights' => ($context['remaining_base'] * (1 + self::TAX_RATE)) * ($percent / 100),

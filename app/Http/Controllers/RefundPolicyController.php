@@ -76,7 +76,10 @@ class RefundPolicyController extends Controller
     {
         try {
             $reservation = Reservation::with(['payments', 'client'])->findOrFail($request->reservation_id);
-            $result = $this->refundPolicyService->preview($reservation);
+            $result = $this->refundPolicyService->preview(
+                $reservation,
+                $request->input('new_expire_date')
+            );
 
             return \SuccessData('Refund preview', [
                 'policy' => $result['policy'],

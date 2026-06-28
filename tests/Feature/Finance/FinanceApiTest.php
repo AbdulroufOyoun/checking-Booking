@@ -31,7 +31,7 @@ class FinanceApiTest extends TestCase
     public function test_get_room_price_matrix_daily_and_monthly(): void
     {
         $user = $this->seedAndUser();
-        $roomType = RoomType::where('name_en', 'Deluxe Test')->first();
+        $roomType = RoomType::where('name_en', 'Deluxe')->first();
         $this->assertNotNull($roomType);
 
         $engine = app(PricingEngine::class);
@@ -139,7 +139,7 @@ class FinanceApiTest extends TestCase
     public function test_daily_rent_price_segments_use_daily_kind(): void
     {
         $user = $this->seedAndUser();
-        $roomType = RoomType::where('name_en', 'Deluxe Test')->first();
+        $roomType = RoomType::where('name_en', 'Deluxe')->first();
 
         $response = $this->actingAs($user, 'api')->postJson('/api/users/getRoomPrice', [
             'startDate' => '2026-08-01',
@@ -160,7 +160,7 @@ class FinanceApiTest extends TestCase
     public function test_mixed_monthly_segments_include_plan_and_room_sources(): void
     {
         $user = $this->seedAndUser();
-        $roomType = RoomType::where('name_en', 'Deluxe Test')->first();
+        $roomType = RoomType::where('name_en', 'Deluxe')->first();
 
         $response = $this->actingAs($user, 'api')->postJson('/api/users/getRoomPrice', [
             'startDate' => '2026-06-03',

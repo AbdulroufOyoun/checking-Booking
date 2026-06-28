@@ -168,9 +168,10 @@ class HotelDemoSeeder extends Seeder
     {
         $types = [
             ['name_en' => 'Standard', 'name_ar' => 'ستاندرد', 'min_d' => 180, 'max_d' => 280, 'min_m' => 4200, 'max_m' => 6500],
-            ['name_en' => 'Deluxe', 'name_ar' => 'ديلوكس', 'min_d' => 280, 'max_d' => 420, 'min_m' => 6500, 'max_m' => 9800],
-            ['name_en' => 'Suite', 'name_ar' => 'جناح', 'min_d' => 450, 'max_d' => 700, 'min_m' => 11000, 'max_m' => 18000],
-            ['name_en' => 'Family', 'name_ar' => 'عائلي', 'min_d' => 320, 'max_d' => 480, 'min_m' => 7500, 'max_m' => 11500],
+            ['name_en' => 'Superior', 'name_ar' => 'ممتاز', 'min_d' => 240, 'max_d' => 360, 'min_m' => 5600, 'max_m' => 8200],
+            ['name_en' => 'Deluxe', 'name_ar' => 'ديلوكس', 'min_d' => 320, 'max_d' => 480, 'min_m' => 7500, 'max_m' => 11500],
+            ['name_en' => 'Family', 'name_ar' => 'عائلي', 'min_d' => 380, 'max_d' => 520, 'min_m' => 8800, 'max_m' => 12500],
+            ['name_en' => 'Suite', 'name_ar' => 'جناح', 'min_d' => 550, 'max_d' => 850, 'min_m' => 13000, 'max_m' => 20000],
         ];
 
         foreach ($types as $t) {
@@ -178,7 +179,14 @@ class HotelDemoSeeder extends Seeder
                 ['name_en' => $t['name_en']],
                 [
                     'name_ar' => $t['name_ar'],
-                    'description' => $t['name_en'] . ' room',
+                    'description' => match ($t['name_en']) {
+                        'Standard' => 'Comfortable room with essential amenities for business or short stays.',
+                        'Superior' => 'Spacious room with upgraded bedding and city or garden view.',
+                        'Deluxe' => 'Premium room with lounge area, minibar, and enhanced in-room services.',
+                        'Family' => 'Large room for families with extra beds and connecting options.',
+                        'Suite' => 'Executive suite with separate living area and VIP amenities.',
+                        default => $t['name_en'] . ' room',
+                    },
                     'Min_daily_price' => $t['min_d'],
                     'Max_daily_price' => $t['max_d'],
                     'Min_monthly_price' => $t['min_m'],
@@ -244,8 +252,8 @@ class HotelDemoSeeder extends Seeder
     private function seedPricingPlans(): void
     {
         $plans = [
-            ['NameEn' => 'Standard Rate 2024-2026', 'NameAr' => 'تسعيرة أغسطس–ديسمبر 2026', 'StartDate' => '2026-08-05', 'EndDate' => '2026-12-31', 'daily' => [220, 350, 550, 380], 'monthly' => [5200, 8200, 14000, 9000]],
-            ['NameEn' => 'Summer Peak 2025', 'NameAr' => 'ذروة صيف 2025', 'StartDate' => '2025-06-01', 'EndDate' => '2025-08-31', 'daily' => [260, 400, 620, 430], 'monthly' => [6000, 9500, 16000, 10200]],
+            ['NameEn' => 'Standard Rate 2024-2026', 'NameAr' => 'تسعيرة أغسطس–ديسمبر 2026', 'StartDate' => '2026-08-05', 'EndDate' => '2026-12-31', 'daily' => [220, 300, 380, 420, 620], 'monthly' => [5200, 6800, 9000, 10200, 15000]],
+            ['NameEn' => 'Summer Peak 2025', 'NameAr' => 'ذروة صيف 2025', 'StartDate' => '2025-06-01', 'EndDate' => '2025-08-31', 'daily' => [260, 340, 430, 480, 700], 'monthly' => [6000, 7800, 10200, 11800, 17000]],
         ];
 
         foreach ($plans as $p) {

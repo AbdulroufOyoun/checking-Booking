@@ -10,10 +10,16 @@ class RefundPolicy extends Model
 {
     use HasFactory;
 
+    public const THRESHOLD_FIXED_DAYS = 'fixed_days';
+
+    public const THRESHOLD_PERCENT_OF_STAY = 'percent_of_stay';
+
     protected $fillable = [
         'name',
         'rent_type',
         'timing',
+        'threshold_mode',
+        'threshold_percent',
         'days_threshold',
         'refund_basis',
         'days_before_checkin',
@@ -25,8 +31,22 @@ class RefundPolicy extends Model
 
     protected $casts = [
         'refund_percent' => 'decimal:2',
+        'threshold_percent' => 'decimal:2',
         'payment_statuses' => 'array',
     ];
+
+    public function resolveThresholdDays(int $totalNights): int
+    {
+        $mode = $this->threshold_mode ?? self::THRESHOLD_FIXED_DAYS;
+
+        if ($mode === self::THRESHOLD_PERCENT_OF_STAY) {
+            $percent = (float) ($this->threshold_percent ?? 0);
+
+            return (int) ceil($totalNights * $percent / 100);
+        }
+
+        return (int) ($this->days_threshold ?? $this->days_before_checkin ?? 0);
+    }
 
     protected static function booted(): void
     {

@@ -24,9 +24,13 @@ class DemoPricingFixSeeder extends Seeder
             ]);
         }
 
-        $demoTypeIds = [1, 2, 3, 4];
-        $daily = [220, 350, 550, 380];
-        $monthly = [5200, 8200, 14000, 9000];
+        $demoTypeIds = RoomType::query()
+            ->whereIn('name_en', ['Standard', 'Superior', 'Deluxe', 'Family', 'Suite'])
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+        $daily = [220, 300, 380, 420, 620];
+        $monthly = [5200, 6800, 9000, 10200, 15000];
 
         if ($standard) {
             foreach ($demoTypeIds as $i => $typeId) {

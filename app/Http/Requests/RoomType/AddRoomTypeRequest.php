@@ -16,8 +16,8 @@ class AddRoomTypeRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'name_ar'     => 'required|string|max:255',
-            'name_en'     => 'required|string|max:255',
+            'name_ar'     => 'required|string|max:255|unique:room_types,name_ar',
+            'name_en'     => 'required|string|max:255|unique:room_types,name_en',
             'description' => 'required|string|max:255',
             'active_type' => 'required|numeric|in:0,1,2',
         ];

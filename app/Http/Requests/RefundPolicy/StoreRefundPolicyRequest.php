@@ -18,7 +18,9 @@ class StoreRefundPolicyRequest extends FormRequest
             'name' => 'required|string|max:255',
             'rent_type' => 'nullable|integer|in:0,1,2',
             'timing' => 'required|in:before_start,after_start',
-            'days_threshold' => 'required|integer|min:0',
+            'threshold_mode' => 'required|in:fixed_days,percent_of_stay',
+            'threshold_percent' => 'required_if:threshold_mode,percent_of_stay|nullable|numeric|min:0|max:100',
+            'days_threshold' => 'required_if:threshold_mode,fixed_days|nullable|integer|min:0',
             'refund_percent' => 'required|numeric|min:0|max:100',
             'refund_basis' => 'required|in:total,remaining_nights,paid_net',
             'payment_status' => 'nullable|integer|in:1,2',
@@ -32,10 +34,17 @@ class StoreRefundPolicyRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $timing = $this->input('timing', 'before_start');
+        $mode = $this->input('threshold_mode', 'fixed_days');
         $merge = [
-            'days_before_checkin' => $this->input('days_threshold', $this->input('days_before_checkin', 0)),
             'during_stay' => $timing === 'after_start' ? 1 : 0,
+            'days_before_checkin' => $mode === 'fixed_days'
+                ? (int) $this->input('days_threshold', $this->input('days_before_checkin', 0))
+                : 0,
         ];
+
+        if ($mode === 'percent_of_stay') {
+            $merge['days_threshold'] = 0;
+        }
 
         if ($this->has('payment_statuses')) {
             $statuses = RefundPolicyPaymentStatus::normalize($this->input('payment_statuses'));

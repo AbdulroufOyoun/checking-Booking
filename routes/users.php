@@ -280,6 +280,7 @@ Route::middleware(['permission:create reservations,api'])->group(function () {
 Route::middleware(['permission:update reservations,api'])->group(function () {
     Route::patch('reservations/{id}', [ReservationController::class, 'update']);
     Route::patch('reservations/{id}/extend', [ReservationController::class, 'extend']);
+    Route::patch('reservations/{id}/shorten', [ReservationController::class, 'shorten']);
     Route::post('reservations/{id}/payments', [ReservationController::class, 'addPayment']);
 });
 

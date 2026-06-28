@@ -18,7 +18,9 @@ class UpdateRefundPolicyRequest extends FormRequest
             'name' => 'sometimes|string|max:255',
             'rent_type' => 'nullable|integer|in:0,1,2',
             'timing' => 'sometimes|in:before_start,after_start',
-            'days_threshold' => 'sometimes|integer|min:0',
+            'threshold_mode' => 'sometimes|in:fixed_days,percent_of_stay',
+            'threshold_percent' => 'sometimes|nullable|numeric|min:0|max:100',
+            'days_threshold' => 'sometimes|nullable|integer|min:0',
             'refund_percent' => 'sometimes|numeric|min:0|max:100',
             'refund_basis' => 'sometimes|in:total,remaining_nights,paid_net',
             'payment_status' => 'sometimes|nullable|integer|in:1,2',
@@ -38,6 +40,9 @@ class UpdateRefundPolicyRequest extends FormRequest
         }
         if ($this->has('days_threshold')) {
             $merge['days_before_checkin'] = $this->input('days_threshold');
+        }
+        if ($this->has('threshold_mode') && $this->input('threshold_mode') === 'percent_of_stay') {
+            $merge['days_threshold'] = 0;
         }
         if ($this->has('payment_statuses')) {
             $statuses = RefundPolicyPaymentStatus::normalize($this->input('payment_statuses'));

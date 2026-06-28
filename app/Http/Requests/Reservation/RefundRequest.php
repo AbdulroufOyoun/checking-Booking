@@ -18,7 +18,7 @@ class RefundRequest extends FormRequest
     {
         return [
             'reservation_id' => 'required|numeric|exists:reservations,id',
-
+            'new_expire_date' => 'nullable|date',
         ];
     }
 

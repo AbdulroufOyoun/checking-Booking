@@ -69,7 +69,7 @@ class RoomTypesController extends Controller
     public function getRoomType()
     {
         try {
-            $roomTypes = RoomType::all();
+            $roomTypes = RoomType::query()->orderBy('name_en')->orderBy('id')->get();
             return SuccessData('Room types retrieved successfully', $roomTypes);
         } catch (\Exception $e) {
             return Failed($e->getMessage());

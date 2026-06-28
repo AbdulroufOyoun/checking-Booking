@@ -3,10 +3,19 @@
 namespace Tests\Feature\RoomType;
 
 use App\Models\RoomType;
+use Tests\Support\InteractsWithTestRoomTypes;
 use Tests\TestCase;
 
 class PricingPlanOverlapTest extends TestCase
 {
+    use InteractsWithTestRoomTypes;
+
+    protected function tearDown(): void
+    {
+        $this->tearDownTestRoomTypes();
+        parent::tearDown();
+    }
+
     private function pricingUser(): \App\Models\User
     {
         return $this->userWithApiPermissions(['manage room types', 'manage pricing plans']);
@@ -14,7 +23,7 @@ class PricingPlanOverlapTest extends TestCase
 
     private function roomTypeWithoutPricing(): RoomType
     {
-        return RoomType::create([
+        return $this->createTestRoomType([
             'name_ar' => 'نوع اختبار التسعير',
             'name_en' => 'Pricing Overlap Test ' . uniqid(),
             'description' => 'Isolated room type for overlap tests',
@@ -22,7 +31,6 @@ class PricingPlanOverlapTest extends TestCase
             'Min_daily_price' => 50,
             'Max_monthly_price' => 10000,
             'Min_monthly_price' => 1000,
-            'active_type' => 1,
         ]);
     }
 

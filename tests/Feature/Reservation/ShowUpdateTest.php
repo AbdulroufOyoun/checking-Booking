@@ -65,6 +65,10 @@ class ShowUpdateTest extends TestCase
         $show->assertStatus(200);
         $show->assertJsonPath('success', true);
         $show->assertJsonPath('data.reservation.id', $reservationId);
+        $show->assertJsonPath('data.reservation.user_id', $user->id);
+        $show->assertJsonPath('data.reservation.user.id', $user->id);
+        $show->assertJsonPath('data.reservation.user.job_number', $user->job_number);
+        $this->assertNotNull($show->json('data.reservation.created_at'));
 
         $patch = $this->actingAs($user, 'api')->patchJson("/api/users/reservations/{$reservationId}", [
             'logedin' => 1,

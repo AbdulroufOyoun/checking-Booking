@@ -17,8 +17,8 @@ class UpdateRoomTypeRequest extends FormRequest
     {
         $rules = [
             'id'          => 'required|numeric|exists:room_types,id',
-            'name_ar'     => 'required|string|max:255',
-            'name_en'     => 'required|string|max:255',
+            'name_ar'     => 'required|string|max:255|unique:room_types,name_ar,' . $this->id,
+            'name_en'     => 'required|string|max:255|unique:room_types,name_en,' . $this->id,
             'description' => 'required|string|max:255',
             'active_type' => 'required|numeric|in:0,1,2',
         ];

@@ -15,6 +15,7 @@ class PreviewRefundPolicyRequest extends FormRequest
     {
         return [
             'reservation_id' => 'required|integer|exists:reservations,id',
+            'new_expire_date' => 'nullable|date',
         ];
     }
 }

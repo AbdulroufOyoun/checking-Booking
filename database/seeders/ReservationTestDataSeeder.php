@@ -361,18 +361,9 @@ class ReservationTestDataSeeder extends Seeder
 
     private function ensureRoomType(): RoomType
     {
-        return RoomType::firstOrCreate(
-            ['name_en' => 'Deluxe Test'],
-            [
-                'name_ar'           => 'ديلوكس تجريبي',
-                'description'       => 'Seeder room type',
-                'Min_daily_price'   => 100,
-                'Max_daily_price'   => 200,
-                'Min_monthly_price' => 2400,
-                'Max_monthly_price' => 4800,
-                'active_type'       => 1,
-            ]
-        );
+        $this->call(HotelRoomTypesSeeder::class);
+
+        return RoomType::query()->where('name_en', 'Deluxe')->firstOrFail();
     }
 
     private function ensurePeakMonthsForPricingTests(): void

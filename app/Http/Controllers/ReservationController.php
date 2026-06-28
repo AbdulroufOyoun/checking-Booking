@@ -37,6 +37,8 @@ use App\Services\RefundPolicyService;
 use App\Exceptions\RefundNotAllowedException;
 use App\Http\Requests\Reservation\CancelReservationRequest;
 use App\Http\Requests\Reservation\ExtendReservationRequest;
+use App\Http\Requests\Reservation\ShortenReservationRequest;
+use App\Services\ReservationShortenService;
 use Carbon\CarbonPeriod;
 
 class ReservationController extends Controller
@@ -47,7 +49,8 @@ class ReservationController extends Controller
         private ReservationRoomStatusService $roomStatusService,
         private AccountingPostingService $accountingPostingService,
         private ReservationFinancialService $reservationFinancialService,
-        private RefundPolicyService $refundPolicyService
+        private RefundPolicyService $refundPolicyService,
+        private ReservationShortenService $shortenService
     ) {
     }
 
@@ -477,6 +480,23 @@ class ReservationController extends Controller
         }
     }
 
+    public function shorten(ShortenReservationRequest $request, int $id)
+    {
+        try {
+            $reservation = Reservation::with('reservationRooms')->findOrFail($id);
+            $this->shortenService->applyShorten(
+                $reservation,
+                Carbon::parse($request->expire_date)->startOfDay()
+            );
+
+            return $this->show($id);
+        } catch (\InvalidArgumentException $e) {
+            return \Failed($e->getMessage(), 422);
+        } catch (\Exception $e) {
+            return \Failed($e->getMessage());
+        }
+    }
+
     public function addPayment(AddReservationPaymentRequest $request, int $id)
     {
         try {
@@ -730,11 +750,27 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
     {
         try {
             DB::beginTransaction();
-            $reservation = Reservation::with(['payments', 'client'])->findOrFail($request->reservation_id);
+            $reservation = Reservation::with(['payments', 'client', 'reservationRooms'])->findOrFail($request->reservation_id);
+            $newExpireDate = $request->input('new_expire_date');
 
-            $preview = $this->refundPolicyService->preview($reservation);
+            if ($newExpireDate) {
+                $this->shortenService->validateShorten(
+                    $reservation,
+                    Carbon::parse($newExpireDate)->startOfDay()
+                );
+            }
+
+            $preview = $this->refundPolicyService->preview($reservation, $newExpireDate);
             $finalRefundAmount = $preview['refund_amount'];
             $policyQuery = $preview['policy'];
+
+            if ($newExpireDate) {
+                $this->shortenService->applyShorten(
+                    $reservation,
+                    Carbon::parse($newExpireDate)->startOfDay()
+                );
+                $reservation->refresh();
+            }
 
             $refundPay = ReservationPay::create([
                 'reservation_id' => $reservation->id,
@@ -745,15 +781,17 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
 
             $this->accountingPostingService->postPayment($refundPay);
 
-            $wasInHouse = (int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE;
-            $reservation->update([
-                'reservation_status' => Reservation::STATUS_CANCELLED,
-                'logedin' => Reservation::LOGEDIN_NOT_IN_HOUSE,
-            ]);
-            $this->roomStatusService->releaseRoomsAfterCancellation(
-                $reservation->fresh(['reservationRooms']),
-                $wasInHouse
-            );
+            if (!$newExpireDate) {
+                $wasInHouse = (int) $reservation->logedin === Reservation::LOGEDIN_IN_HOUSE;
+                $reservation->update([
+                    'reservation_status' => Reservation::STATUS_CANCELLED,
+                    'logedin' => Reservation::LOGEDIN_NOT_IN_HOUSE,
+                ]);
+                $this->roomStatusService->releaseRoomsAfterCancellation(
+                    $reservation->fresh(['reservationRooms']),
+                    $wasInHouse
+                );
+            }
 
             DB::commit();
 
@@ -762,8 +800,13 @@ $taxes = round($subtotal * 0.15, 2, PHP_ROUND_HALF_UP);        $total = $subtota
                 'amount' => $finalRefundAmount,
                 'policy_name' => $policyQuery->name,
                 'breakdown' => $preview['breakdown'],
+                'partial_cancel' => $newExpireDate !== null,
             ]);
         } catch (RefundNotAllowedException $e) {
+            DB::rollBack();
+
+            return \Failed($e->getMessage(), 422);
+        } catch (\InvalidArgumentException $e) {
             DB::rollBack();
 
             return \Failed($e->getMessage(), 422);

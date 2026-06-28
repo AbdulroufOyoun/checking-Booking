@@ -4,13 +4,21 @@ namespace Tests\Feature\Reservation;
 
 use App\Models\Pricingplan;
 use App\Models\Room;
-use App\Models\RoomType;
 use App\Models\RoomtypePricingplan;
 use App\Services\PricingEngine;
+use Tests\Support\InteractsWithTestRoomTypes;
 use Tests\TestCase;
 
 class MixedPricingApiTest extends TestCase
 {
+    use InteractsWithTestRoomTypes;
+
+    protected function tearDown(): void
+    {
+        $this->tearDownTestRoomTypes();
+        parent::tearDown();
+    }
+
     private function authUser(): \App\Models\User
     {
         return $this->userWithApiPermissions(['create reservations', 'view reservations']);
@@ -23,7 +31,7 @@ class MixedPricingApiTest extends TestCase
     {
         $user = $this->authUser();
 
-        $roomType = RoomType::create([
+        $roomType = $this->createTestRoomType([
             'name_ar' => 'اختبار ميكس',
             'name_en' => 'Mixed API Test ' . uniqid(),
             'description' => 'API mixed pricing test',
@@ -31,7 +39,6 @@ class MixedPricingApiTest extends TestCase
             'Max_daily_price' => 200,
             'Min_monthly_price' => 2400,
             'Max_monthly_price' => 4800,
-            'active_type' => 1,
         ]);
 
         $longPlan = Pricingplan::create([
@@ -112,7 +119,7 @@ class MixedPricingApiTest extends TestCase
     {
         $user = $this->authUser();
 
-        $roomType = RoomType::create([
+        $roomType = $this->createTestRoomType([
             'name_ar' => 'بدون خطة متقاطعة',
             'name_en' => 'No Overlap Plan ' . uniqid(),
             'description' => 'Plan starts after stay',
@@ -120,7 +127,6 @@ class MixedPricingApiTest extends TestCase
             'Max_daily_price' => 180,
             'Min_monthly_price' => 3000,
             'Max_monthly_price' => 4500,
-            'active_type' => 1,
         ]);
 
         $latePlan = Pricingplan::create([

@@ -27,6 +27,13 @@ class UsersController extends Controller
      */
     public function login(LoginRequest $request)
     {
+        if (!extension_loaded('pdo') || !extension_loaded('pdo_mysql')) {
+            return \Failed(
+                'PHP extensions pdo and pdo_mysql are disabled on the server. Enable them in cPanel → Select PHP Version for hotelsystemback.osus.network, then retry login.',
+                503
+            );
+        }
+
         try {
             $arr = Arr::only($request->validated(), ['job_number', 'password']);
             $where = ['job_number' => $arr['job_number']];

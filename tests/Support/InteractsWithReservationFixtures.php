@@ -43,7 +43,7 @@ trait InteractsWithReservationFixtures
 
     protected function createIsolatedTestRoom(): ?Room
     {
-        $roomType = RoomType::query()->where('active', 1)->first();
+        $roomType = RoomType::query()->first();
         if (!$roomType) {
             return null;
         }

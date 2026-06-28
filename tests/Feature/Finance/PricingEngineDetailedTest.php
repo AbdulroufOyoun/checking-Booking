@@ -18,7 +18,7 @@ class PricingEngineDetailedTest extends TestCase
             '--no-interaction' => true,
         ]);
 
-        $roomType = RoomType::where('name_en', 'Deluxe Test')->firstOrFail();
+        $roomType = RoomType::where('name_en', 'Deluxe')->firstOrFail();
         $room = Room::where('room_type_id', $roomType->id)->where('active', 1)->firstOrFail();
 
         return [$room, $roomType];

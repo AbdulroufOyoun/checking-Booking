@@ -20,6 +20,22 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
     require $maintenance;
 }
 
+$requestUri = $_SERVER['REQUEST_URI'] ?? '';
+if (
+    str_starts_with($requestUri, '/api/')
+    && (!extension_loaded('pdo') || !extension_loaded('pdo_mysql'))
+) {
+    header('Content-Type: application/json');
+    http_response_code(503);
+    echo json_encode([
+        'success' => false,
+        'message' => 'PHP extensions pdo and pdo_mysql are disabled on the server. Enable them in cPanel → Select PHP Version for the API subdomain, then retry login.',
+        'code' => 503,
+        'data' => null,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 /*
 |--------------------------------------------------------------------------
 | Register The Auto Loader

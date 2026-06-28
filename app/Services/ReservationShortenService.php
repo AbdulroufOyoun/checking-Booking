@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Reservation;
+use App\Models\ReservationDailyCharge;
+use App\Services\Accounting\AccountingPostingService;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
+class ReservationShortenService
+{
+    public function __construct(
+        private ReservationRoomStatusService $roomStatusService,
+        private AccountingPostingService $accountingPostingService
+    ) {
+    }
+
+    /**
+     * @throws \InvalidArgumentException
+     */
+    public function validateShorten(Reservation $reservation, Carbon $newExpire): void
+    {
+        if (\App\Models\Reservation::isCancelled((int) $reservation->reservation_status)) {
+            throw new \InvalidArgumentException('Cannot shorten a cancelled reservation.');
+        }
+
+        $today = Carbon::today()->startOfDay();
+        $start = Carbon::parse($reservation->start_date)->startOfDay();
+        $currentExpire = Carbon::parse($reservation->expire_date)->startOfDay();
+
+        if ($currentExpire->lt($today)) {
+            throw new \InvalidArgumentException('Cannot shorten a completed stay.');
+        }
+
+        if ($newExpire->lte($start)) {
+            throw new \InvalidArgumentException('New checkout must be after check-in date.');
+        }
+
+        if ($newExpire->lte($today)) {
+            throw new \InvalidArgumentException('New checkout must be after today.');
+        }
+
+        if ($newExpire->gte($currentExpire)) {
+            throw new \InvalidArgumentException('New checkout must be before the current departure date.');
+        }
+    }
+
+    public function applyShorten(Reservation $reservation, Carbon $newExpire): Reservation
+    {
+        $this->validateShorten($reservation, $newExpire);
+
+        return DB::transaction(function () use ($reservation, $newExpire) {
+            $reservation->loadMissing('reservationRooms');
+
+            $newExpireStr = $newExpire->toDateString();
+
+            ReservationDailyCharge::query()
+                ->where('reservation_id', $reservation->id)
+                ->where('charge_date', '>=', $newExpireStr)
+                ->delete();
+
+            $totalBase = (float) ReservationDailyCharge::query()
+                ->where('reservation_id', $reservation->id)
+                ->sum('base_amount');
+
+            $startDate = Carbon::parse($reservation->start_date)->startOfDay();
+            $reservation->expire_date = $newExpireStr;
+            $reservation->nights = (int) $startDate->diffInDays($newExpire);
+            $reservation->base_price = round($totalBase, 2);
+            $reservation->subtotal = round(
+                $reservation->base_price - $reservation->discount + $reservation->extras + $reservation->penalties,
+                2
+            );
+            $reservation->taxes = round($reservation->subtotal * RefundPolicyService::TAX_RATE, 2, PHP_ROUND_HALF_UP);
+            $reservation->total = round($reservation->subtotal + $reservation->taxes, 2);
+            $reservation->save();
+
+            foreach ($reservation->reservationRooms as $resRoom) {
+                $this->accountingPostingService->syncAccrualForReservationRoom((int) $resRoom->id);
+            }
+
+            $this->roomStatusService->syncForReservation($reservation->fresh(['reservationRooms']));
+
+            return $reservation->fresh(['payments', 'reservationRooms']);
+        });
+    }
+}
